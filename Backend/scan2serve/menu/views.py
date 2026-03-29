@@ -19,6 +19,7 @@ class MenuItemViewSet(viewsets.ModelViewSet):
         return [permission() for permission in permission_classes]
 
 
+
 class MenuCategoryViewSet(viewsets.ModelViewSet):
     queryset = MenuCategory.objects.all()
     serializer_class = MenuCategorySerializer

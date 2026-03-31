@@ -1,7 +1,9 @@
 from rest_framework import generics, status
 from rest_framework.views import APIView
+from users.permissions import IsAdmin, IsKitchen, IsCashier, IsCustomer, IsAdminOrReadOnly, HasAnyRole
+from rest_framework.permissions import IsAuthenticated, SAFE_METHODS, AllowAny
 from rest_framework.response import Response
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from django.shortcuts import get_object_or_404
 from .models import Order, Feedback
 from .serializers import (
@@ -12,6 +14,40 @@ from .serializers import (
 )
 from .services import request_bill
 
+def get_order_for_request(request, pk):
+    """
+    Fetch an order and verify the requester is allowed to access it.
+    - Authenticated users: must own the order or be staff/admin
+    - Guests: must supply matching X-Guest-Token header
+    """
+    order = get_object_or_404(Order, pk=pk)
+
+    if request.user.is_authenticated:
+        if request.user.is_staff or hasattr(request.user, 'role') and request.user.role != 'customer':
+            return order  # kitchen, cashier, admin bypass
+        if order.user == request.user:
+            return order
+        from rest_framework.exceptions import PermissionDenied
+        raise PermissionDenied("You do not have access to this order.")
+
+    # Guest access via token
+    guest_token = request.headers.get('X-Guest-Token')
+    if guest_token and guest_token == order.guest_token:
+        return order
+
+    from rest_framework.exceptions import PermissionDenied
+    raise PermissionDenied("You do not have access to this order.")
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [AllowAny]  # guests can create orders
+        return [IsAdmin | IsKitchen | IsCashier]
+
+    def perform_create(self, serializer):
+        user = self.request.user if self.request.user.is_authenticated else None
+        guest_token = None if user else secrets.token_urlsafe(32)
+
+        serializer.save(user=user, guest_token=guest_token)
 
 class OrderListCreateView(generics.ListCreateAPIView):
     """List all orders or create a new order with items."""
@@ -22,14 +58,28 @@ class OrderListCreateView(generics.ListCreateAPIView):
             return OrderCreateSerializer
         return OrderSerializer
 
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsCustomer | AllowAny]                           
+        return [IsAdmin | IsKitchen | IsCashier]
+
 
 class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update, or delete a specific order."""
     queryset = Order.objects.prefetch_related('items__menu_item', 'feedback').all()
     serializer_class = OrderSerializer
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            return [AllowAny()]  # access controlled manually in get_object
+        return [IsAdmin() | IsCashier()]
+
+    def get_object(self):
+        return get_order_for_request(self.request, self.kwargs['pk'])
 
 
 class OrderStatusUpdateView(APIView):
+    
+    permission_classes = [IsAdmin | IsKitchen | IsCashier]
     """
     PATCH /orders/<pk>/status/
     Update only the status of an order.
@@ -46,6 +96,7 @@ class OrderStatusUpdateView(APIView):
 
 class FeedbackCreateView(generics.CreateAPIView):
     """POST /orders/<pk>/feedback/ — Submit feedback for a completed order."""
+    permission_classes = [AllowAny]
     serializer_class = FeedbackSerializer
 
     def perform_create(self, serializer):
@@ -57,8 +108,14 @@ class FeedbackCreateView(generics.CreateAPIView):
 
         serializer.save(order=order)
 
+class FeedbackListView(generics.ListAPIView):
+    """GET /feedbacks/ — List all feedbacks."""
+    serializer_class = FeedbackSerializer
+    queryset = Feedback.objects.select_related('order').all()
+
 
 class FeedbackDetailView(generics.RetrieveUpdateAPIView):
+    permission_classes = [AllowAny]
     """GET/PATCH /orders/<pk>/feedback/detail/ — Retrieve or update feedback."""
     serializer_class = FeedbackSerializer
 
@@ -67,6 +124,7 @@ class FeedbackDetailView(generics.RetrieveUpdateAPIView):
 
 
 @api_view(['POST'])
+@permission_classes([AllowAny])
 def request_bill_view(request, order_id):
     """
     POST /orders/<order_id>/request-bill/

@@ -29,6 +29,19 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         fields = ('email', 'name', 'password', 'role', 'phone_no')
 
+    def validate_role(self, value):
+        request = self.context.get('request')
+        restricted_roles = ['kitchen', 'cashier', 'admin']
+
+        if value in restricted_roles:
+            # Must be authenticated and be an admin
+            if not request or not request.user.is_authenticated:
+                raise serializers.ValidationError("You must be logged in to assign this role.")
+            if request.user.role != 'admin':
+                raise serializers.ValidationError("Only admins can assign this role.")
+
+        return value
+
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)
         return user

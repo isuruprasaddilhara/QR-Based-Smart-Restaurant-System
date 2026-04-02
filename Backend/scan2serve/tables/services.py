@@ -3,9 +3,9 @@ import qrcode
 from io import BytesIO
 from .models import Table
 
-def create_table_with_qr() -> Table:
+def create_table_with_qr (section: str = None, capacity: int = 2) -> Table:
     token = str(uuid.uuid4())
-    table = Table.objects.create(qr_code=token, status=False)
+    table = Table.objects.create(qr_code=token, status=False, section=section, capacity=capacity)
     return table
 
 def build_qr_image(table: Table, base_url: str = "https://yourapp.com/menu") -> BytesIO:

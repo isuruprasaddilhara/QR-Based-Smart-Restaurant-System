@@ -18,7 +18,9 @@ def table_list(request):
         return Response(serializer.data)
 
     if request.method == 'POST':
-        table = create_table_with_qr()
+        section = request.data.get('section', None)
+        capacity = request.data.get('capacity', 2)
+        table = create_table_with_qr(section=section, capacity=capacity)
         serializer = TableSerializer(table, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 

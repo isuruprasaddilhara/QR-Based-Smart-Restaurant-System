@@ -15,6 +15,7 @@ class MenuItem(models.Model):
     availability = models.BooleanField(default=True)
     image_url = models.URLField(blank=True)
     ingredients = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.name

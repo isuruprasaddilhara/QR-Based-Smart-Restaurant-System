@@ -76,11 +76,11 @@ def generate_bill_pdf(order) -> bytes:
         [Paragraph(f"<b>Date:</b> {order.created_at.strftime('%d %b %Y, %I:%M %p')}", left_s),
          Paragraph(f"<b>Status:</b> {order.get_status_display()}", right_s)],
     ]
-    if order.special_notes:
-        meta_rows.append([
-            Paragraph(f"<b>Notes:</b> {order.special_notes}", left_s),
-            Paragraph("", right_s),
-        ])
+    # if order.special_notes:
+    #     meta_rows.append([
+    #         Paragraph(f"<b>Notes:</b> {order.special_notes}", left_s),
+    #         Paragraph("", right_s),
+    #     ])
 
     meta_tbl = Table(meta_rows, colWidths=["50%", "50%"])
     meta_tbl.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP")]))

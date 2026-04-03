@@ -7,7 +7,6 @@ from .views import (
     FeedbackDetailView,
     request_bill_view,
     FeedbackListView,
-    bill_download_view,
     bill_soft_copy_view,
     bill_hard_copy_view,
 
@@ -22,7 +21,6 @@ urlpatterns = [
     path('<int:pk>/feedback/', FeedbackCreateView.as_view(), name='feedback-create'),
     path('<int:pk>/feedback/detail/', FeedbackDetailView.as_view(), name='feedback-detail'),
 
-    path('<int:order_id>/bill/', bill_download_view, name='bill-download'),
     path('<int:order_id>/bill/soft/', bill_soft_copy_view, name='bill-soft'),
     path('<int:order_id>/bill/print/', bill_hard_copy_view, name='bill-hard-copy'),
 ]

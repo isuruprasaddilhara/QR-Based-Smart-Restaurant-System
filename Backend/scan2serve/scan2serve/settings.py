@@ -13,9 +13,16 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 from datetime import timedelta
 
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+load_dotenv(BASE_DIR / ".env")
+
+OPENAI_API_KEY = os.getenv("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")
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/

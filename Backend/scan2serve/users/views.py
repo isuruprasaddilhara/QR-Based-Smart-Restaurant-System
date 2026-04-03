@@ -198,10 +198,10 @@ class CustomerDeleteView(APIView):
 
 
 class StaffDeleteView(APIView):
-    """Admin deletes any staff account."""
+    #Admin can deletes any staff account. Staff can delete their own account but not other staff accounts.
     permission_classes = [IsAuthenticated]
 
-    def delete(self, request, user_id=None):  # user_id now optional
+    def delete(self, request, user_id=None):  # user_id optional
         target_id = user_id if user_id is not None else request.user.id  # fallback to self
 
         try:
@@ -263,7 +263,7 @@ class ForgotPasswordView(APIView):
 
 
 class PasswordResetConfirmView(APIView):
-    """Public endpoint — takes uid + token + new_password."""
+    #Public endpoint — takes uid + token + new_password. No authentication required.
 
     def post(self, request):
         data = {

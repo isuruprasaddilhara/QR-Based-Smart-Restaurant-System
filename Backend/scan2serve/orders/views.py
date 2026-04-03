@@ -13,7 +13,7 @@ from .serializers import (
     FeedbackSerializer,
 )
 from .services import request_bill
-from .bill_generator import generate_bill_pdf
+from .bill_generator import generate_bill_pdf, generate_thermal_pdf
 from django.http import HttpResponse
 from django.core.mail import EmailMessage
 
@@ -236,7 +236,7 @@ def bill_hard_copy_view(request, order_id):
 
     try:
         _mark_order_completed(order)
-        pdf_bytes = generate_bill_pdf(order)
+        pdf_bytes = generate_thermal_pdf(order)
     except Exception as exc:
         return Response(
             {'error': 'Could not generate bill.', 'detail': str(exc)},

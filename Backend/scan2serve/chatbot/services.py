@@ -1,15 +1,21 @@
 from decimal import Decimal
+from typing import Dict, List
+
 from django.conf import settings
-from django.db.models import Q
+from django.db.models import Avg, Count, Q, Sum
 from openai import OpenAI
 
 from menu.models import MenuItem, MenuCategory
-from orders.models import Order
+from orders.models import Order, OrderItem, Feedback
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
-def _format_money(value):
+# ----------------------------
+# Small helpers
+# ----------------------------
+
+def money(value) -> str:
     if value is None:
         return "0.00"
     if isinstance(value, Decimal):
@@ -17,40 +23,37 @@ def _format_money(value):
     return str(value)
 
 
-def build_system_prompt():
-    return (
-        "You are a helpful chatbot for a restaurant management application. "
-        "Answer only from the provided database context. "
-        "Do not invent menu items, prices, order statuses, tables, or any other facts. "
-        "If the answer is not available in the context, say clearly that the information is not available. "
-        "Keep answers short, clear, and helpful."
+def normalize(text: str) -> str:
+    return (text or "").strip().lower()
+
+
+def contains_any(text: str, words: List[str]) -> bool:
+    text = normalize(text)
+    return any(word in text for word in words)
+
+
+def extract_keywords(message: str) -> List[str]:
+    cleaned = (
+        normalize(message)
+        .replace(",", " ")
+        .replace(".", " ")
+        .replace("?", " ")
+        .replace("!", " ")
+        .replace("-", " ")
     )
+    words = [w.strip() for w in cleaned.split() if len(w.strip()) >= 3]
+    return list(dict.fromkeys(words))
 
 
-def extract_keywords(message: str):
-    words = []
-    for word in message.lower().replace(",", " ").replace(".", " ").split():
-        word = word.strip()
-        if len(word) >= 3:
-            words.append(word)
-    return list(set(words))
+# ----------------------------
+# Menu queries
+# ----------------------------
 
-
-def get_menu_context(message: str) -> str:
-    """
-    Return menu-related context based on the user's message.
-    """
-    message_lower = message.lower()
+def find_matching_menu_items(message: str):
     keywords = extract_keywords(message)
 
-    menu_query_words = {
-        "menu", "food", "drink", "price", "available", "availability",
-        "item", "items", "dish", "dishes", "burger", "pizza", "rice",
-        "coffee", "tea", "juice", "category", "categories", "ingredient",
-        "ingredients"
-    }
-
-    should_search_menu = any(word in message_lower for word in menu_query_words)
+    if not keywords:
+        return MenuItem.objects.none()
 
     query = Q()
     for word in keywords:
@@ -59,177 +62,327 @@ def get_menu_context(message: str) -> str:
         query |= Q(ingredients__icontains=word)
         query |= Q(category__name__icontains=word)
 
-    matched_items = MenuItem.objects.select_related("category").filter(query).distinct()[:10] if query else MenuItem.objects.none()
+    return (
+        MenuItem.objects.select_related("category")
+        .filter(query)
+        .distinct()
+    )
 
-    if matched_items.exists():
-        lines = []
-        for item in matched_items:
-            lines.append(
-                f"- {item.name} | Category: {item.category.name} | "
-                f"Price: {_format_money(item.price)} | Available: {item.availability} | "
-                f"Ingredients: {item.ingredients or 'N/A'}"
-            )
-        return "MATCHED MENU ITEMS:\n" + "\n".join(lines)
 
-    if should_search_menu:
-        available_items = (
-            MenuItem.objects.select_related("category")
-            .filter(availability=True)
-            .order_by("category__name", "name")[:15]
+def get_available_menu_items(limit: int = 15) -> List[Dict]:
+    items = (
+        MenuItem.objects.select_related("category")
+        .filter(availability=True)
+        .order_by("category__name", "name")[:limit]
+    )
+
+    return [
+        {
+            "name": item.name,
+            "category": item.category.name,
+            "price": money(item.price),
+            "ingredients": item.ingredients or "N/A",
+            "description": item.description or "N/A",
+        }
+        for item in items
+    ]
+
+
+def get_menu_item_details(message: str) -> List[Dict]:
+    items = find_matching_menu_items(message)[:10]
+
+    return [
+        {
+            "name": item.name,
+            "category": item.category.name,
+            "price": money(item.price),
+            "available": item.availability,
+            "ingredients": item.ingredients or "N/A",
+            "description": item.description or "N/A",
+        }
+        for item in items
+    ]
+
+
+def get_menu_categories() -> List[str]:
+    return list(MenuCategory.objects.order_by("name").values_list("name", flat=True))
+
+
+# ----------------------------
+# Analytics / calculations
+# ----------------------------
+
+def get_most_ordered_dishes(limit: int = 5):
+    rows = (
+        OrderItem.objects
+        .values("menu_item__id", "menu_item__name")
+        .annotate(total_quantity=Sum("quantity"))
+        .order_by("-total_quantity")[:limit]
+    )
+
+    dish_ids = [row["menu_item__id"] for row in rows]
+
+    items = MenuItem.objects.filter(id__in=dish_ids)
+
+    item_map = {item.id: item for item in items}
+
+    result = []
+    for row in rows:
+        item = item_map.get(row["menu_item__id"])
+        if item:
+            result.append({
+                "name": item.name,
+                "price": f"{item.price:.2f}",
+                "category": item.category.name,
+                "description": item.description or "",
+            })
+
+    return result
+
+def get_top_rated_dishes(limit: int = 5, min_reviews: int = 1) -> List[Dict]:
+    rows = (
+        MenuItem.objects
+        .filter(orderitem__order__feedback__isnull=False)
+        .annotate(
+            avg_rating=Avg("orderitem__order__feedback__rating"),
+            review_count=Count("orderitem__order__feedback")
         )
+        .filter(review_count__gte=min_reviews)
+        .order_by("-avg_rating", "-review_count", "name")[:limit]
+    )
 
-        if available_items.exists():
-            lines = []
-            for item in available_items:
-                lines.append(
-                    f"- {item.name} | Category: {item.category.name} | Price: {_format_money(item.price)}"
-                )
-            return "AVAILABLE MENU ITEMS:\n" + "\n".join(lines)
-
-    return ""
-
-
-def get_category_context(message: str) -> str:
-    message_lower = message.lower()
-    if "category" not in message_lower and "categories" not in message_lower:
-        return ""
-
-    categories = MenuCategory.objects.order_by("name")
-    if not categories.exists():
-        return "MENU CATEGORIES:\n- No categories found."
-
-    lines = [f"- {category.name}" for category in categories]
-    return "MENU CATEGORIES:\n" + "\n".join(lines)
+    return [
+        {
+            "name": item.name,
+            "avg_rating": round(item.avg_rating or 0, 2),
+            "review_count": item.review_count or 0,
+            "price": money(item.price),
+        }
+        for item in rows
+    ]
 
 
-def get_order_context(user, message: str) -> str:
-    """
-    Return user-specific order context.
-    Only authenticated users can see their own orders here.
-    """
-    message_lower = message.lower()
+def get_order_stats() -> Dict:
+    total_orders = Order.objects.count()
+    completed_orders = Order.objects.filter(status="completed").count()
+    pending_orders = Order.objects.filter(status="pending").count()
+    preparing_orders = Order.objects.filter(status="preparing").count()
+    served_orders = Order.objects.filter(status="served").count()
 
-    order_words = {"order", "orders", "status", "bill", "total", "my order", "recent order"}
-    if not any(word in message_lower for word in order_words):
-        return ""
+    total_sales = (
+        Order.objects.filter(status="completed")
+        .aggregate(total=Sum("total_amount"))
+        .get("total") or Decimal("0.00")
+    )
 
+    avg_feedback = (
+        Feedback.objects.aggregate(avg=Avg("rating")).get("avg")
+    )
+
+    return {
+        "total_orders": total_orders,
+        "completed_orders": completed_orders,
+        "pending_orders": pending_orders,
+        "preparing_orders": preparing_orders,
+        "served_orders": served_orders,
+        "total_sales": money(total_sales),
+        "average_feedback_rating": round(avg_feedback, 2) if avg_feedback is not None else None,
+    }
+
+
+# ----------------------------
+# Customer-specific queries
+# ----------------------------
+
+def get_user_recent_orders(user, limit: int = 5) -> List[Dict]:
     if not user or not user.is_authenticated:
-        return (
-            "ORDER INFO:\n"
-            "- User is not authenticated, so personal order data is not available."
-        )
+        return []
 
     orders = (
-        Order.objects.select_related("table", "user")
+        Order.objects.select_related("table")
         .prefetch_related("items__menu_item")
         .filter(user=user)
-        .order_by("-created_at")[:5]
+        .order_by("-created_at")[:limit]
     )
 
-    if not orders.exists():
-        return "USER RECENT ORDERS:\n- No orders found for this user."
-
-    order_blocks = []
+    data = []
     for order in orders:
-        item_lines = []
+        items = []
         for item in order.items.all():
-            item_lines.append(
-                f"  * {item.menu_item.name} x {item.quantity} | Line Total: {_format_money(item.price)}"
-            )
+            items.append({
+                "name": item.menu_item.name,
+                "quantity": item.quantity,
+                "line_total": money(item.price),
+            })
 
-        items_text = "\n".join(item_lines) if item_lines else "  * No items"
-        table_id = order.table.id if order.table else "N/A"
+        data.append({
+            "order_id": order.id,
+            "status": order.status,
+            "total_amount": money(order.total_amount),
+            "table_id": order.table.id if order.table else None,
+            "special_notes": order.special_notes or "",
+            "created_at": str(order.created_at),
+            "items": items,
+        })
 
-        order_blocks.append(
-            f"Order #{order.id}\n"
-            f"- Status: {order.status}\n"
-            f"- Total Amount: {_format_money(order.total_amount)}\n"
-            f"- Table: {table_id}\n"
-            f"- Special Notes: {order.special_notes or 'N/A'}\n"
-            f"- Created At: {order.created_at}\n"
-            f"- Items:\n{items_text}"
-        )
-
-    return "USER RECENT ORDERS:\n" + "\n\n".join(order_blocks)
-
-
-def get_table_context(message: str) -> str:
-    """
-    Optional simple table info based on menu/order/table questions.
-    Since your Table model has status, section, capacity.
-    """
-    from tables.models import Table
-
-    message_lower = message.lower()
-    if "table" not in message_lower and "tables" not in message_lower:
-        return ""
-
-    tables = Table.objects.order_by("id")[:10]
-    if not tables.exists():
-        return "TABLE INFO:\n- No tables found."
-
-    lines = []
-    for table in tables:
-        lines.append(
-            f"- Table {table.id} | Occupied: {table.status} | "
-            f"Section: {table.section or 'N/A'} | Capacity: {table.capacity}"
-        )
-    return "TABLE INFO:\n" + "\n".join(lines)
+    return data
 
 
-def get_fallback_context() -> str:
-    total_categories = MenuCategory.objects.count()
-    total_menu_items = MenuItem.objects.count()
-    total_available_items = MenuItem.objects.filter(availability=True).count()
-    total_orders = Order.objects.count()
+# ----------------------------
+# Intent routing
+# ----------------------------
 
+def detect_intent(message: str) -> str:
+    text = normalize(message)
+
+    if contains_any(text, [
+        "most ordered", "popular dish", "popular dishes", "best selling",
+        "top selling", "most popular", "most ordered dish"
+    ]):
+        return "popular_dishes"
+
+    if contains_any(text, [
+        "top rated", "best rated", "highest rated", "best dish"
+    ]):
+        return "top_rated_dishes"
+
+    if contains_any(text, [
+        "ingredient", "ingredients", "what is in", "contains", "content of"
+    ]):
+        return "dish_contents"
+
+    if contains_any(text, [
+        "price", "cost", "how much"
+    ]):
+        return "dish_price"
+
+    if contains_any(text, [
+        "available", "availability", "do you have", "menu", "show menu"
+    ]):
+        return "menu_lookup"
+
+    if contains_any(text, [
+        "category", "categories"
+    ]):
+        return "categories"
+
+    if contains_any(text, [
+        "my order", "my orders", "order status", "recent orders", "my recent order"
+    ]):
+        return "user_orders"
+
+    if contains_any(text, [
+        "sales", "total orders", "order stats", "statistics", "analytics"
+    ]):
+        return "order_stats"
+
+    return "general_lookup"
+
+
+# ----------------------------
+# Structured context builder
+# ----------------------------
+
+def build_structured_context(user, message: str) -> Dict:
+    intent = detect_intent(message)
+
+    if intent == "popular_dishes":
+        return {
+            "intent": intent,
+            "data": {
+                "most_ordered_dishes": get_most_ordered_dishes()
+            }
+        }
+
+    if intent == "top_rated_dishes":
+        return {
+            "intent": intent,
+            "data": {
+                "top_rated_dishes": get_top_rated_dishes()
+            }
+        }
+
+    if intent in {"dish_contents", "dish_price", "menu_lookup", "general_lookup"}:
+        matched_items = get_menu_item_details(message)
+
+        if matched_items:
+            return {
+                "intent": intent,
+                "data": {
+                    "matched_menu_items": matched_items
+                }
+            }
+
+        return {
+            "intent": intent,
+            "data": {
+                "available_menu_items": get_available_menu_items()
+            }
+        }
+
+    if intent == "categories":
+        return {
+            "intent": intent,
+            "data": {
+                "categories": get_menu_categories()
+            }
+        }
+
+    if intent == "user_orders":
+        return {
+            "intent": intent,
+            "data": {
+                "user_recent_orders": get_user_recent_orders(user)
+            }
+        }
+
+    if intent == "order_stats":
+        return {
+            "intent": intent,
+            "data": {
+                "order_stats": get_order_stats(),
+                "most_ordered_dishes": get_most_ordered_dishes(),
+                "top_rated_dishes": get_top_rated_dishes(),
+            }
+        }
+
+    return {
+        "intent": "fallback",
+        "data": {
+            "available_menu_items": get_available_menu_items(),
+            "most_ordered_dishes": get_most_ordered_dishes(3),
+        }
+    }
+
+
+# ----------------------------
+# OpenAI prompt
+# ----------------------------
+
+def system_prompt() -> str:
     return (
-        "APP SUMMARY:\n"
-        f"- Total Categories: {total_categories}\n"
-        f"- Total Menu Items: {total_menu_items}\n"
-        f"- Available Menu Items: {total_available_items}\n"
-        f"- Total Orders: {total_orders}"
+        "You are a reliable restaurant assistant for customers. "
+        "You must answer only from the structured database facts provided to you. "
+        "Never invent dishes, prices, ingredients, popularity, ratings, or order details. "
+        "If the data is missing, say that clearly. "
+        "Be concise, friendly, and accurate. "
+        "If multiple dishes match, mention them clearly."
     )
-
-
-def build_app_context(user, message: str) -> str:
-    parts = []
-
-    menu_context = get_menu_context(message)
-    if menu_context:
-        parts.append(menu_context)
-
-    category_context = get_category_context(message)
-    if category_context:
-        parts.append(category_context)
-
-    order_context = get_order_context(user, message)
-    if order_context:
-        parts.append(order_context)
-
-    table_context = get_table_context(message)
-    if table_context:
-        parts.append(table_context)
-
-    if not parts:
-        parts.append(get_fallback_context())
-
-    return "\n\n".join(parts)
 
 
 def ask_chatbot(user, message: str) -> str:
-    app_context = build_app_context(user, message)
+    context = build_structured_context(user, message)
 
     response = client.responses.create(
         model="gpt-4.1-mini",
         input=[
             {
                 "role": "system",
-                "content": build_system_prompt(),
+                "content": system_prompt(),
             },
             {
                 "role": "system",
-                "content": f"APP DATABASE CONTEXT:\n{app_context}",
+                "content": f"STRUCTURED DATABASE FACTS:\n{context}",
             },
             {
                 "role": "user",

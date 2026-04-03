@@ -140,3 +140,142 @@ def request_bill_view(request, order_id):
         })
     except ValueError as e:
         return Response({'error': str(e)}, status=400)
+
+
+
+# ── Bill Views ─────────────────────────────────────────────────────────────────
+ 
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def bill_download_view(request, order_id):
+    """
+    GET /orders/<order_id>/bill/
+    Download the bill as a PDF file.
+ 
+    Query params:
+        inline=true  → opens in browser instead of downloading (useful for print dialog)
+ 
+    Access: same rules as order detail — owner, guest token, or staff.
+    """
+    order = get_order_for_request(request, order_id)
+ 
+    try:
+        pdf_bytes = generate_bill_pdf(order)
+    except Exception as exc:
+        return Response(
+            {'error': 'Could not generate bill.', 'detail': str(exc)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+ 
+    inline = request.query_params.get('inline', 'false').lower() == 'true'
+    disposition = 'inline' if inline else 'attachment'
+    filename = f"bill_order_{order_id}.pdf"
+ 
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
+    response['Content-Length'] = len(pdf_bytes)
+    return response
+ 
+ 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def bill_soft_copy_view(request, order_id):
+    """
+    POST /orders/<order_id>/bill/soft/
+    Generate the bill PDF and email it to the customer.
+ 
+    Body (JSON):
+        {
+            "email": "customer@example.com"   ← required
+        }
+ 
+    Access: same rules as order detail — owner, guest token, or staff.
+    """
+    order = get_order_for_request(request, order_id)
+ 
+    email_to = request.data.get('email', '').strip()
+    if not email_to:
+        return Response(
+            {'error': 'An email address is required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+ 
+    try:
+        pdf_bytes = generate_bill_pdf(order)
+    except Exception as exc:
+        return Response(
+            {'error': 'Could not generate bill.', 'detail': str(exc)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+ 
+    # Resolve restaurant name for the email subject/body
+    restaurant = getattr(order.table, 'restaurant', None)
+    rest_name = getattr(restaurant, 'name', 'Scan2Serve Restaurant') if restaurant else 'Scan2Serve Restaurant'
+    from_email = getattr(restaurant, 'email', None) if restaurant else None
+    from_email = from_email or 'noreply@scan2serve.app'
+ 
+    tbl_number = getattr(order.table, 'number',
+                 getattr(order.table, 'table_number', order.table.pk))
+ 
+    subject = f"Your Bill from {rest_name} – Table {tbl_number}"
+    body = (
+        f"Dear Guest,\n\n"
+        f"Thank you for dining at {rest_name}!\n"
+        f"Your bill for Table {tbl_number} is attached.\n\n"
+        f"Total: LKR {order.total_amount:.2f}\n\n"
+        f"We hope to see you again soon.\n\n"
+        f"– {rest_name} Team\n"
+        f"Powered by Scan2Serve"
+    )
+ 
+    try:
+        mail = EmailMessage(
+            subject=subject,
+            body=body,
+            from_email=from_email,
+            to=[email_to],
+        )
+        mail.attach(f"bill_order_{order_id}.pdf", pdf_bytes, 'application/pdf')
+        mail.send(fail_silently=False)
+    except Exception as exc:
+        return Response(
+            {'error': 'Bill generated but email delivery failed.', 'detail': str(exc)},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+ 
+    return Response({
+        'message': f'Bill sent to {email_to}.',
+        'order_id': order_id,
+        'total_amount': str(order.total_amount),
+    }, status=status.HTTP_200_OK)
+ 
+ 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def bill_hard_copy_view(request, order_id):
+    """
+    POST /orders/<order_id>/bill/print/
+    Returns the bill PDF with inline disposition so the browser print dialog opens.
+ 
+    The frontend should open this URL in a new tab/iframe and call window.print().
+ 
+    Access: same rules as order detail — owner, guest token, or staff.
+    """
+    order = get_order_for_request(request, order_id)
+ 
+    try:
+        pdf_bytes = generate_bill_pdf(order)
+    except Exception as exc:
+        return Response(
+            {'error': 'Could not generate bill.', 'detail': str(exc)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+ 
+    filename = f"bill_order_{order_id}.pdf"
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    # inline → browser opens the PDF (user hits Ctrl+P or auto-print via JS)
+    response['Content-Disposition'] = f'inline; filename="{filename}"'
+    response['Content-Length'] = len(pdf_bytes)
+    response['X-Print-Intent'] = 'auto'   # hint for print servers / kiosk setups
+    return response
+ 

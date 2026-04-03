@@ -62,6 +62,8 @@ class CustomerEditSerializer(serializers.ModelSerializer):
             'phone_no': {'required': False},
         }
 
+    
+
     def update(self, instance, validated_data):
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
@@ -80,6 +82,12 @@ class StaffEditSerializer(serializers.ModelSerializer):
             'name': {'required': False},
             'phone_no': {'required': False},
         }
+    
+    def validate_role(self, value):
+        request = self.context.get('request')
+        if request and request.user.role != 'admin':
+            raise serializers.ValidationError("You do not have permission to change your role.")
+        return value
 
     def update(self, instance, validated_data):
         for attr, value in validated_data.items():

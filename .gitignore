@@ -8,3 +8,5 @@ Backend/venv/Lib/site-packages/openai/types/beta/threads/runs/__pycache__/tool_c
 *.pyc
 *.pyc
 *.sqlite3
+*.pyc
+*.pyc

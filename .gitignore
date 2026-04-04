@@ -7,3 +7,4 @@ Backend/scan2serve/.env
 Backend/venv/Lib/site-packages/openai/types/beta/threads/runs/__pycache__/tool_call_delta.cpython-311.pyc
 *.pyc
 *.pyc
+*.sqlite3

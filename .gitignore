@@ -1,0 +1,124 @@
+######################################
+# 🔹 General
+######################################
+*.log
+*.pot
+*.pyc
+*.pyo
+*.pyd
+*.swp
+*.swo
+.env
+.env.*
+*~
+.DS_Store
+Thumbs.db
+**/*.pyc
+######################################
+# 🔹 Python / Django
+######################################
+__pycache__/
+*.py[cod]
+*.sqlite3
+
+# Django stuff
+db.sqlite3
+media/
+staticfiles/
+static/
+
+# Migrations (optional: keep __init__.py)
+**/migrations/*
+!**/migrations/__init__.py
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+######################################
+# 🔹 Environment variables
+######################################
+.env
+.env.*
+!.env.example
+
+######################################
+# 🔹 Django settings / secrets
+######################################
+*.secret
+secrets.json
+
+######################################
+# 🔹 Node / React
+######################################
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+######################################
+# 🔹 React build output
+######################################
+build/
+dist/
+
+######################################
+# 🔹 Package managers
+######################################
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+######################################
+# 🔹 Testing / Coverage
+######################################
+.coverage
+coverage/
+htmlcov/
+.pytest_cache/
+
+######################################
+# 🔹 IDE / Editor
+######################################
+.vscode/
+.idea/
+*.iml
+
+######################################
+# 🔹 OS / Misc
+######################################
+*.bak
+*.tmp
+.cache/
+
+######################################
+# 🔹 Docker (if used)
+######################################
+*.pid
+*.seed
+*.pid.lock
+
+######################################
+# 🔹 Celery / Redis (if used)
+######################################
+celerybeat-schedule
+celerybeat.pid
+
+######################################
+# 🔹 Sentry / Logs
+######################################
+sentry-debug.log
+/Backend/venv/Lib/site-packages/httpx/_transports/__pycache__
+/Backend/venv/Lib/site-packages/bcrypt/__pycache__
+/Backend/venv/Lib/site-packages/dotenv/__pycache__
+/Backend/venv/Lib/site-packages/dotenv/__pycache__
+/Backend/venv/Lib/site-packages/anyio/__pycache__
+/Backend/venv/Lib/site-packages/anyio/__pycache__
+/Backend/venv/Lib/site-packages/openai/types/fine_tuning/checkpoints/__pycache__
+/Backend/venv/Lib/site-packages/openai/types/graders/__pycache__
+/Backend/venv/Lib/site-packages/openai/types/responses/__pycache__
+/Backend/venv/Lib/site-packages/sniffio/__pycache__
+/Backend/venv/Lib/site-packages/sniffio/__pycache__
+/Backend/venv/Lib/site-packages/reportlab/lib/__pycache__
+/Backend/venv/Lib/site-packages/reportlab/__pycache__

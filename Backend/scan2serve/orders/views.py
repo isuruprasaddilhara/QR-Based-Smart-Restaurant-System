@@ -62,9 +62,18 @@ class OrderListCreateView(generics.ListCreateAPIView):
         return OrderSerializer
 
     def get_permissions(self):
-        if self.request.method == 'POST':
-            return [AllowAny()]   # guests can create orders
-        return [HasAnyRole(['admin', 'kitchen', 'cashier'])]
+        if self.action == 'create':          # POST
+            # guests (anon) + customers can submit orders
+            return [AllowAnonymous() | IsCustomer()]
+
+        if self.action in ('update', 'partial_update', 'retrieve', 'list'):  # GET + PUT/PATCH
+            # staff roles only
+            return [IsAdmin() | IsKitchen() | IsCashier()]
+
+        if self.action == 'destroy':         # DELETE
+            return [IsAdmin()]               # lock down deletes to admin only
+
+        return [IsAdmin()]
 
 
 class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):

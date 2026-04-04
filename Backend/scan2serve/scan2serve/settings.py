@@ -65,6 +65,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'scan2serve.middleware.UserActivityMiddleware',
 ]
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -167,3 +168,50 @@ PASSWORD_HASHERS = [
 ]
 
 CORS_ALLOW_ALL_ORIGINS = True
+
+#-----------loggin configuration----------------
+
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'activity': {
+            'format': '{asctime} | {levelname} | {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'activity',
+        },
+        'app_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs/app.log',
+            'maxBytes': 1024 * 1024 * 5,  # 5 MB
+            'backupCount': 5,
+            'formatter': 'activity',
+        },
+        'user_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs/user_activity.log',
+            'maxBytes': 1024 * 1024 * 5,
+            'backupCount': 5,
+            'formatter': 'activity',
+        },
+    },
+    'loggers': {
+        'myapp': {          # system/app errors
+            'handlers': ['console', 'app_file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        'user_activity': {  # user actions
+            'handlers': ['console', 'user_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

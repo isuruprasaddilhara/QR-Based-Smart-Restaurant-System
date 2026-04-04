@@ -111,3 +111,10 @@ celerybeat.pid
 sentry-debug.log
 /Backend/venv/Lib/site-packages/httpx/_transports/__pycache__
 /Backend/venv/Lib/site-packages/bcrypt/__pycache__
+/Backend/venv/Lib/site-packages/dotenv/__pycache__
+/Backend/venv/Lib/site-packages/dotenv/__pycache__
+/Backend/venv/Lib/site-packages/anyio/__pycache__
+/Backend/venv/Lib/site-packages/anyio/__pycache__
+/Backend/venv/Lib/site-packages/openai/types/fine_tuning/checkpoints/__pycache__
+/Backend/venv/Lib/site-packages/openai/types/graders/__pycache__
+/Backend/venv/Lib/site-packages/openai/types/responses/__pycache__

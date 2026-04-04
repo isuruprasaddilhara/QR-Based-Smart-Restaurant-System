@@ -110,3 +110,4 @@ celerybeat.pid
 ######################################
 sentry-debug.log
 /Backend/venv/Lib/site-packages/httpx/_transports/__pycache__
+/Backend/venv/Lib/site-packages/bcrypt/__pycache__

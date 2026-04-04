@@ -1,13 +1,16 @@
 from django.http import FileResponse
 from rest_framework import status
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from .models import Table
 from .serializers import TableSerializer
 from .services import create_table_with_qr, build_qr_image
+from users.permissions import IsAdmin, IsKitchen, IsCashier, IsAdminOrReadOnly
+
 
 
 @api_view(['GET', 'POST'])
+@permission_classes([IsAdmin | IsCashier])  
 def table_list(request):
     if request.method == 'GET':
         tables = Table.objects.all()
@@ -15,7 +18,9 @@ def table_list(request):
         return Response(serializer.data)
 
     if request.method == 'POST':
-        table = create_table_with_qr()
+        section = request.data.get('section', None)
+        capacity = request.data.get('capacity', 2)
+        table = create_table_with_qr(section=section, capacity=capacity)
         serializer = TableSerializer(table, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 

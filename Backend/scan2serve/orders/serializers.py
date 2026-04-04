@@ -39,10 +39,11 @@ class OrderSerializer(serializers.ModelSerializer):
 
 class OrderCreateSerializer(serializers.ModelSerializer):
     items = OrderItemCreateSerializer(many=True, write_only=True)
+    guest_token = serializers.CharField(read_only=True)
 
     class Meta:
         model = Order
-        fields = ['id', 'table', 'user', 'special_notes', 'items']
+        fields = ['id', 'table', 'user', 'special_notes', 'items','guest_token']
 
     def validate_items(self, items):
         if not items:

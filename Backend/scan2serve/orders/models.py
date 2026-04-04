@@ -12,7 +12,8 @@ class Order(models.Model):
     )
 
     table = models.ForeignKey(Table, on_delete=models.CASCADE)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE,null=True, blank=True)
+    guest_token = models.CharField(max_length=255, null=True, blank=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     total_amount = models.DecimalField(max_digits=10, decimal_places=2, blank=True)
     special_notes = models.TextField(blank=True)

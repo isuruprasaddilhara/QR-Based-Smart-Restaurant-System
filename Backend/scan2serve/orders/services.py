@@ -11,6 +11,4 @@ def request_bill(order_id):
             f"Current status: '{order.status}'."
         )
 
-    order.status = 'completed'
-    order.save()
     return order

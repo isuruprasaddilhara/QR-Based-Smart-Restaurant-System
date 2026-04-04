@@ -118,3 +118,7 @@ sentry-debug.log
 /Backend/venv/Lib/site-packages/openai/types/fine_tuning/checkpoints/__pycache__
 /Backend/venv/Lib/site-packages/openai/types/graders/__pycache__
 /Backend/venv/Lib/site-packages/openai/types/responses/__pycache__
+/Backend/venv/Lib/site-packages/sniffio/__pycache__
+/Backend/venv/Lib/site-packages/sniffio/__pycache__
+/Backend/venv/Lib/site-packages/reportlab/lib/__pycache__
+/Backend/venv/Lib/site-packages/reportlab/__pycache__

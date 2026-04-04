@@ -54,7 +54,9 @@ INSTALLED_APPS = [
     'menu',
     'tables',
     'orders',
+
 ]
+
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -66,6 +68,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'scan2serve.middleware.UserActivityMiddleware',
+    'scan2serve.middleware.LoginAttemptMiddleware',
 ]
 
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
@@ -201,6 +204,13 @@ LOGGING = {
             'backupCount': 5,
             'formatter': 'activity',
         },
+        'login_attempt_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': BASE_DIR / 'logs/user_login_attempt.log',
+            'maxBytes': 5242880,
+            'backupCount': 5,
+            'formatter': 'activity',
+        },
     },
     'loggers': {
         'myapp': {          # system/app errors
@@ -213,5 +223,10 @@ LOGGING = {
             'level': 'INFO',
             'propagate': False,
         },
+        'login_attempt': {
+        'handlers': ['console', 'login_attempt_file'],
+        'level': 'INFO',
+        'propagate': False,
+    },
     },
 }

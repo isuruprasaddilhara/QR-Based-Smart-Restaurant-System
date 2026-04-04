@@ -8,6 +8,7 @@ class Order(models.Model):
         ('pending', 'Pending'),
         ('preparing', 'Preparing'),
         ('served', 'Served'),
+        ('requested', 'Requested'),
         ('completed', 'Completed'),
     )
 

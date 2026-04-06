@@ -25,7 +25,7 @@ from .serializers import (
     CashierBillRequestSerializer
 )
 from .services import request_bill
-from .throttles import OrderCreateThrottle
+from scan2serve.throttles import OrderCreateThrottle
 
 # ── Helpers / Mixins ───────────────────────────────────────────────────────────
 

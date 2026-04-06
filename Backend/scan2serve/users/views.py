@@ -15,7 +15,7 @@ from rest_framework.permissions import IsAuthenticated
 from users.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
-from .throttles import LoginAnonThrottle, LoginUserThrottle, RegisterThrottle, PasswordResetThrottle
+from scan2serve.throttles import LoginAnonThrottle, LoginUserThrottle, RegisterThrottle, PasswordResetThrottle
 
 class LoginView(APIView):
     throttle_classes = [LoginAnonThrottle, LoginUserThrottle]

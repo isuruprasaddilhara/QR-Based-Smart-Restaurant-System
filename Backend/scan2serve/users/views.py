@@ -15,8 +15,10 @@ from rest_framework.permissions import IsAuthenticated
 from users.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
+from .throttles import LoginAnonThrottle, LoginUserThrottle, RegisterThrottle, PasswordResetThrottle
 
 class LoginView(APIView):
+    throttle_classes = [LoginAnonThrottle, LoginUserThrottle]
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
 
@@ -56,7 +58,7 @@ class LogoutView(APIView):
 
 class CustomerRegisterView(APIView):
     """Public endpoint — no authentication required."""
-
+    throttle_classes = [RegisterThrottle]
     def post(self, request):
         serializer = CustomerRegisterSerializer(data=request.data)
 
@@ -76,6 +78,7 @@ class CustomerRegisterView(APIView):
 
 
 class StaffRegisterView(APIView):
+    throttle_classes = [RegisterThrottle]
     permission_classes = [IsAdmin]
     def post(self, request):
         serializer = StaffRegisterSerializer(data=request.data)
@@ -263,6 +266,7 @@ class ForgotPasswordView(APIView):
 
 
 class PasswordResetConfirmView(APIView):
+    throttle_classes = [PasswordResetThrottle]
     #Public endpoint — takes uid + token + new_password. No authentication required.
 
     def post(self, request):

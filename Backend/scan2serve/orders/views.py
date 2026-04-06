@@ -25,7 +25,7 @@ from .serializers import (
     CashierBillRequestSerializer
 )
 from .services import request_bill
-
+from .throttles import OrderCreateThrottle
 
 # ── Helpers / Mixins ───────────────────────────────────────────────────────────
 
@@ -77,7 +77,7 @@ def _mark_order_completed(order):
 
 class OrderListCreateView(generics.ListCreateAPIView):
     """List all orders (staff only) or create a new order with items."""
-
+    throttle_classes = [OrderCreateThrottle]
     queryset = (
         Order.objects
         .select_related('user', 'table')

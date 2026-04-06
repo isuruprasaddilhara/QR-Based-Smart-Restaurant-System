@@ -26,6 +26,7 @@ def table_list(request):
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAdmin | IsCashier])  
 def table_detail(request, pk):
     try:
         table = Table.objects.get(pk=pk)
@@ -65,6 +66,7 @@ def toggle_table_status(request, pk):
 
 
 @api_view(['GET'])
+@permission_classes([IsAdmin | IsCashier]) 
 def download_qr(request, pk):
     try:
         table = Table.objects.get(pk=pk)

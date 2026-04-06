@@ -29,7 +29,7 @@ from .serializers import (
     HourlyOrderSerializer,
     DashboardSummarySerializer,
 )
-from .permissions import IsAdminOrCashier
+from users.permissions import IsAdminOrCashier
 from .utils import get_date_range
 
 

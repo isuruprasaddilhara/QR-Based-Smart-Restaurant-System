@@ -52,15 +52,53 @@ class HourlyOrderSerializer(serializers.Serializer):
     total_revenue = serializers.DecimalField(max_digits=12, decimal_places=2)
 
 
+# class DashboardSummarySerializer(serializers.Serializer):
+#     total_revenue_today = serializers.DecimalField(max_digits=12, decimal_places=2)
+#     total_orders_today = serializers.IntegerField()
+#     average_order_value_today = serializers.DecimalField(max_digits=10, decimal_places=2)
+#     pending_orders = serializers.IntegerField()
+#     preparing_orders = serializers.IntegerField()
+#     active_tables = serializers.IntegerField()
+#     total_tables = serializers.IntegerField()
+#     average_rating = serializers.FloatField(allow_null=True)
+#     top_item_today = serializers.CharField(allow_null=True)
+#     revenue_this_week = serializers.DecimalField(max_digits=12, decimal_places=2)
+#     revenue_this_month = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+class PopularItemSerializer(serializers.Serializer):
+    menu_item__id = serializers.IntegerField()
+    menu_item__name = serializers.CharField()
+    total_quantity = serializers.IntegerField()
+    total_orders = serializers.IntegerField()
+
+
+class DailyRevenueSerializer(serializers.Serializer):
+    day = serializers.CharField()
+    total_revenue = serializers.DecimalField(max_digits=12, decimal_places=2)
+    order_count = serializers.IntegerField()
+
+class MostOrderedCustomerSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    email = serializers.EmailField()
+    phone_no = serializers.CharField(allow_null=True, allow_blank=True)
+    total_orders = serializers.IntegerField()
+    total_spent = serializers.DecimalField(max_digits=10, decimal_places=2)
+
+
 class DashboardSummarySerializer(serializers.Serializer):
-    total_revenue_today = serializers.DecimalField(max_digits=12, decimal_places=2)
-    total_orders_today = serializers.IntegerField()
-    average_order_value_today = serializers.DecimalField(max_digits=10, decimal_places=2)
+    total_revenue = serializers.DecimalField(max_digits=12, decimal_places=2)
+    total_orders = serializers.IntegerField()
+    average_order_value = serializers.DecimalField(max_digits=12, decimal_places=2)
+
     pending_orders = serializers.IntegerField()
     preparing_orders = serializers.IntegerField()
-    active_tables = serializers.IntegerField()
-    total_tables = serializers.IntegerField()
-    average_rating = serializers.FloatField(allow_null=True)
-    top_item_today = serializers.CharField(allow_null=True)
-    revenue_this_week = serializers.DecimalField(max_digits=12, decimal_places=2)
-    revenue_this_month = serializers.DecimalField(max_digits=12, decimal_places=2)
+
+    peak_time = serializers.CharField(allow_null=True)
+    peak_time_order_count = serializers.IntegerField()
+
+    popular_items = PopularItemSerializer(many=True)
+    daily_revenue = DailyRevenueSerializer(many=True)
+
+    average_order_processing_time_minutes = serializers.FloatField(allow_null=True)
+    most_ordered_customers = MostOrderedCustomerSerializer(many=True)

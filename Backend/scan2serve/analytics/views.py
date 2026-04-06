@@ -2,7 +2,7 @@ from django.shortcuts import render
 
 # Create your views here.
 from django.db.models import (
-    Sum, Count, Avg, F, ExpressionWrapper, DecimalField, IntegerField
+    Sum, Count, Avg, F, ExpressionWrapper, DecimalField, IntegerField, DurationField
 )
 from django.db.models.functions import TruncDate, TruncWeek, TruncMonth, ExtractHour
 from django.utils import timezone
@@ -37,21 +37,133 @@ class DashboardSummaryView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrCashier]
 
     def get(self, request):
-        start_date, end_date = get_date_range(request)  # ← use shared util
+        start_date, end_date = get_date_range(request)
 
+        # Only completed orders for revenue/order analytics
         completed_orders = Order.objects.filter(
             status='completed',
             created_at__date__gte=start_date,
             created_at__date__lte=end_date,
         )
-        agg = completed_orders.aggregate(
-            total_revenue=Sum('total_amount'),
-            order_count=Count('id'),
-        )
-        total_revenue = agg['total_revenue'] or 0
-        order_count = agg['order_count'] or 0
-        avg_order = round(total_revenue / order_count, 2) if order_count else 0
 
+        # -------------------------------
+        # 1) Basic summary cards
+        # -------------------------------
+        summary = completed_orders.aggregate(
+            total_revenue=Sum('total_amount'),
+            total_orders=Count('id'),
+        )
+
+        total_revenue = summary['total_revenue'] or 0
+        total_orders = summary['total_orders'] or 0
+        average_order_value = round(total_revenue / total_orders, 2) if total_orders else 0
+
+        # -------------------------------
+        # 2) Peak time (hour with most orders)
+        # -------------------------------
+        peak_time_data = (
+            completed_orders
+            .annotate(hour=ExtractHour('created_at'))
+            .values('hour')
+            .annotate(order_count=Count('id'))
+            .order_by('-order_count', 'hour')
+            .first()
+        )
+
+        peak_time = None
+        if peak_time_data and peak_time_data['hour'] is not None:
+            hour = peak_time_data['hour']
+            peak_time = f"{hour:02d}:00 - {hour:02d}:59"
+
+        # -------------------------------
+        # 3) Popular items
+        # -------------------------------
+        popular_items = list(
+            OrderItem.objects.filter(
+                order__status='completed',
+                order__created_at__date__gte=start_date,
+                order__created_at__date__lte=end_date,
+            )
+            .values('menu_item__id', 'menu_item__name')
+            .annotate(
+                total_quantity=Sum('quantity'),
+                total_orders=Count('order', distinct=True),
+            )
+            .order_by('-total_quantity')[:5]
+        )
+
+        # -------------------------------
+        # 4) Daily revenue
+        # -------------------------------
+        daily_revenue = list(
+            completed_orders
+            .annotate(day=TruncDate('created_at'))
+            .values('day')
+            .annotate(
+                total_revenue=Sum('total_amount'),
+                order_count=Count('id'),
+            )
+            .order_by('day')
+        )
+
+        for row in daily_revenue:
+            row['day'] = str(row['day'])
+
+       # 5) Average order processing time
+        # pending -> served = created_at -> served_at
+        served_orders = Order.objects.filter(
+            served_at__isnull=False,
+            created_at__date__gte=start_date,
+            created_at__date__lte=end_date,
+        )
+
+        avg_time_data = served_orders.annotate(
+            processing_time=ExpressionWrapper(
+                F('served_at') - F('created_at'),
+                output_field=DurationField()
+            )
+        ).aggregate(
+            avg_processing_time=Avg('processing_time')
+        )
+
+        avg_processing_time = avg_time_data['avg_processing_time']
+        avg_processing_time_minutes = (
+            round(avg_processing_time.total_seconds() / 60, 2)
+            if avg_processing_time else 0
+        )
+
+        # -------------------------------
+        # 6) Top 10 most ordered customers (registered users only)
+        # -------------------------------
+        most_ordered_customers = list(
+            Order.objects.filter(
+                status='completed',
+                created_at__date__gte=start_date,
+                created_at__date__lte=end_date,
+                user__isnull=False,
+                user__role='customer',  # exclude cashiers/admins placing test orders
+            )
+            .values('user__id', 'user__name', 'user__email', 'user__phone_no')
+            .annotate(
+                total_orders=Count('id'),
+                total_spent=Sum('total_amount'),
+            )
+        .order_by('-total_orders', '-total_spent')[:10]
+        )
+
+        most_ordered_customers = [
+            {
+                "id": row["user__id"],
+                "name": row["user__name"],
+                "email": row["user__email"],
+                "phone_no": row["user__phone_no"],
+                "total_orders": row["total_orders"],
+                "total_spent": row["total_spent"],
+            }
+            for row in most_ordered_customers
+        ]
+
+        # Optional extra counts for dashboard
         pending_orders = Order.objects.filter(
             status='pending',
             created_at__date__gte=start_date,
@@ -64,41 +176,24 @@ class DashboardSummaryView(APIView):
             created_at__date__lte=end_date,
         ).count()
 
-        active_tables = Table.objects.filter(status=True).count()
-        total_tables = Table.objects.count()
-
-        avg_rating = Feedback.objects.filter(
-            order__created_at__date__gte=start_date,
-            order__created_at__date__lte=end_date,
-        ).aggregate(avg=Avg('rating'))['avg']
-
-        top_item = (
-            OrderItem.objects.filter(
-                order__created_at__date__gte=start_date,
-                order__created_at__date__lte=end_date,
-            )
-            .values('menu_item__name')
-            .annotate(total_qty=Sum('quantity'))
-            .order_by('-total_qty')
-            .first()
-        )
-
         data = {
-            'total_revenue_today': total_revenue,
-            'total_orders_today': order_count,
-            'average_order_value_today': avg_order,
-            'pending_orders': pending_orders,
-            'preparing_orders': preparing_orders,
-            'active_tables': active_tables,
-            'total_tables': total_tables,
-            'average_rating': round(avg_rating, 2) if avg_rating else None,
-            'top_item_today': top_item['menu_item__name'] if top_item else None,
-            'revenue_this_week': total_revenue,   # same range now
-            'revenue_this_month': total_revenue,  # same range now
+            "total_revenue": total_revenue,
+            "total_orders": total_orders,
+            "average_order_value": average_order_value,
+            "pending_orders": pending_orders,
+            "preparing_orders": preparing_orders,
+
+            "peak_time": peak_time,
+            "peak_time_order_count": peak_time_data['order_count'] if peak_time_data else 0,
+
+            "popular_items": popular_items,
+            "daily_revenue": daily_revenue,
+
+            "average_order_processing_time_minutes": avg_processing_time_minutes,
+            "most_ordered_customers": most_ordered_customers,
         }
 
-        serializer = DashboardSummarySerializer(data)
-        return Response(serializer.data)
+        return Response(data)
 
 
 class RevenueAnalyticsView(APIView):

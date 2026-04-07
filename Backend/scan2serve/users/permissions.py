@@ -83,6 +83,24 @@ class IsAdminOrCashier(BasePermission):
             and getattr(request.user, 'role', None) in ('admin', 'cashier')
         )
 
+class IsAdminOrCashierOrReadOnly(BasePermission):
+    """
+    - Read (GET, HEAD, OPTIONS): Allow anyone
+    - Write (POST, PUT, PATCH, DELETE): Only admin & cashier
+    """
+    message = "Write access restricted to admin and cashier roles."
+
+    def has_permission(self, request, view):
+        # Allow read for everyone (even unauthenticated)
+        if request.method in SAFE_METHODS:
+            return True
+
+        # Write access → only admin or cashier
+        return (
+            request.user
+            and request.user.is_authenticated
+            and getattr(request.user, 'role', None) in ('admin', 'cashier')
+        )
 
 class IsAdminOnly(BasePermission):
     """
@@ -95,6 +113,24 @@ class IsAdminOnly(BasePermission):
             request.user
             and request.user.is_authenticated
             and getattr(request.user, 'role', None) == 'admin'
+        )
+
+class IsStaff(BasePermission):
+    """
+    Allows full access to staff users:
+    - admin
+    - kitchen
+    - cashier
+    """
+    message = "Access restricted to staff only."
+
+    STAFF_ROLES = {'admin', 'kitchen', 'cashier'}
+
+    def has_permission(self, request, view):
+        return (
+            request.user
+            and request.user.is_authenticated
+            and getattr(request.user, 'role', None) in self.STAFF_ROLES
         )
 
 class OrderPermission(BasePermission):

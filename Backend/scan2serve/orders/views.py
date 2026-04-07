@@ -13,7 +13,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from users.permissions import IsAdmin, IsKitchen, IsCashier, IsCustomer
+from users.permissions import IsAdmin, IsKitchen, IsCashier, IsCustomer,IsStaff
 
 from .bill_generator import generate_bill_pdf, generate_thermal_pdf
 from .models import Order, Feedback
@@ -119,7 +119,7 @@ class OrderDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):
         if self.request.method == 'GET':
             # Ownership / guest-token check is enforced in get_object().
             return [AllowAny()]
-        return [(IsAdmin | IsCashier)()]
+        return [(IsAdmin | IsCashier | IsKitchen)()]
 
     def get_object(self):
         return self.get_order(self.kwargs['pk'])
@@ -128,7 +128,7 @@ class OrderDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):
 class OrderStatusUpdateView(APIView):
     """PATCH /orders/<pk>/status/ — Update only the status of an order."""
 
-    permission_classes = [IsAdmin | IsKitchen | IsCashier]
+    permission_classes = [IsStaff]
 
     def patch(self, request, pk):
         order = get_object_or_404(Order, pk=pk)
@@ -159,7 +159,7 @@ class FeedbackCreateView(OrderAccessMixin, generics.CreateAPIView):
 
 class FeedbackListView(generics.ListAPIView):
     """GET /feedbacks/ — List all feedbacks (staff use)."""
-
+    permission_classes = [IsStaff]
     serializer_class = FeedbackSerializer
     queryset = Feedback.objects.select_related('order').all()
 
@@ -167,7 +167,7 @@ class FeedbackListView(generics.ListAPIView):
 class FeedbackDetailView(OrderAccessMixin, generics.RetrieveUpdateAPIView):
     """GET/PATCH /orders/<pk>/feedback/detail/ — Retrieve or update feedback."""
 
-    permission_classes = [AllowAny]
+    permission_classes = [IsStaff]
     serializer_class = FeedbackSerializer
 
     def get_object(self):
@@ -210,7 +210,7 @@ class BillRequestedOrdersView(generics.ListAPIView):
 
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsCashier])
 def bill_soft_copy_view(request, order_id):
     """
     POST /orders/<order_id>/bill/soft/
@@ -283,7 +283,7 @@ def bill_soft_copy_view(request, order_id):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsCashier])
 def bill_hard_copy_view(request, order_id):
     """
     GET /orders/<order_id>/bill/print/

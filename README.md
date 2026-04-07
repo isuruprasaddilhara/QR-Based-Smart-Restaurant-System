@@ -2,7 +2,7 @@
 
 run below command in backend directory to create and run virtual environment 
 --------------------------
-python3 -m venv venv
+python3 -m venv venv \n
 venv\\Scripts\\activate
 ---------------------------
 

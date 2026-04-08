@@ -144,7 +144,6 @@ class OrderStatusUpdateView(APIView):
 class FeedbackCreateView(OrderAccessMixin, generics.CreateAPIView):
     """POST /orders/<pk>/feedback/ — Submit feedback for a completed order."""
 
-    permission_classes = [AllowAny]
     serializer_class = FeedbackSerializer
 
     def perform_create(self, serializer):

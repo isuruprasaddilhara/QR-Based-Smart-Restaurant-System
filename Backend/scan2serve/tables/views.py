@@ -18,14 +18,16 @@ def table_list(request):
         return Response(serializer.data)
 
     if request.method == 'POST':
+        table_number = request.data.get('table_number')
         section = request.data.get('section', None)
         capacity = request.data.get('capacity', 2)
-        table = create_table_with_qr(section=section, capacity=capacity)
+        table = create_table_with_qr(table_number=table_number, section=section, capacity=capacity)
         serializer = TableSerializer(table, context={'request': request})
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
+@permission_classes([IsAdmin | IsCashier])  
 def table_detail(request, pk):
     try:
         table = Table.objects.get(pk=pk)
@@ -65,6 +67,7 @@ def toggle_table_status(request, pk):
 
 
 @api_view(['GET'])
+@permission_classes([IsAdmin | IsCashier]) 
 def download_qr(request, pk):
     try:
         table = Table.objects.get(pk=pk)

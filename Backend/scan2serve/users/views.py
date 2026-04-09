@@ -9,14 +9,17 @@ CustomerEditSerializer,
 StaffEditSerializer, 
 PasswordChangeSerializer,
 ForgotPasswordSerializer,
-PasswordResetConfirmSerializer)
+PasswordResetConfirmSerializer,
+UserSerializer)
 from users.permissions import IsAdmin
 from rest_framework.permissions import IsAuthenticated
 from users.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
+from scan2serve.throttles import LoginAnonThrottle, LoginUserThrottle, RegisterThrottle, PasswordResetThrottle
 
 class LoginView(APIView):
+    throttle_classes = [LoginAnonThrottle, LoginUserThrottle]
     def post(self, request):
         serializer = LoginSerializer(data=request.data)
 
@@ -56,7 +59,7 @@ class LogoutView(APIView):
 
 class CustomerRegisterView(APIView):
     """Public endpoint — no authentication required."""
-
+    throttle_classes = [RegisterThrottle]
     def post(self, request):
         serializer = CustomerRegisterSerializer(data=request.data)
 
@@ -76,6 +79,7 @@ class CustomerRegisterView(APIView):
 
 
 class StaffRegisterView(APIView):
+    throttle_classes = [RegisterThrottle]
     permission_classes = [IsAdmin]
     def post(self, request):
         serializer = StaffRegisterSerializer(data=request.data)
@@ -263,6 +267,7 @@ class ForgotPasswordView(APIView):
 
 
 class PasswordResetConfirmView(APIView):
+    throttle_classes = [PasswordResetThrottle]
     #Public endpoint — takes uid + token + new_password. No authentication required.
 
     def post(self, request):
@@ -279,3 +284,44 @@ class PasswordResetConfirmView(APIView):
                 status=status.HTTP_200_OK,
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class StaffListView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]  # Only admin can view staff
+
+    def get(self, request):
+        staff_users = User.objects.exclude(role='customer').exclude(id=request.user.id )
+        serializer = UserSerializer(staff_users, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+class UserDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, user_id=None):
+        target_id = user_id if user_id is not None else request.user.id
+
+        try:
+            user = User.objects.get(id=target_id)
+        except User.DoesNotExist:
+            return Response(
+                {'detail': 'User not found.'},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Do not allow this endpoint for customers
+        if user.role == 'customer':
+            return Response(
+                {'detail': 'This endpoint is only for staff users.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Admin can view any staff user
+        # Non-admin staff can only view themselves
+        if request.user.role != 'admin' and request.user.id != user.id:
+            return Response(
+                {'detail': 'You do not have permission to view this user.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        serializer = UserSerializer(user)
+        return Response(serializer.data, status=status.HTTP_200_OK)

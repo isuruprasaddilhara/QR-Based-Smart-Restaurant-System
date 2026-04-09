@@ -116,14 +116,13 @@ def get_most_ordered_dishes(limit: int = 5):
     rows = (
         OrderItem.objects
         .values("menu_item__id", "menu_item__name")
-        .annotate(total_quantity=Sum("quantity"))
-        .order_by("-total_quantity")[:limit]
+        .annotate(order_count=Count("id"))   # 🔥 changed from Sum → Count
+        .order_by("-order_count")[:limit]
     )
 
     dish_ids = [row["menu_item__id"] for row in rows]
 
-    items = MenuItem.objects.filter(id__in=dish_ids)
-
+    items = MenuItem.objects.filter(id__in=dish_ids).select_related("category")
     item_map = {item.id: item for item in items}
 
     result = []
@@ -135,6 +134,7 @@ def get_most_ordered_dishes(limit: int = 5):
                 "price": f"{item.price:.2f}",
                 "category": item.category.name,
                 "description": item.description or "",
+                "times_ordered": row["order_count"],  
             })
 
     return result

@@ -11,4 +11,10 @@ def request_bill(order_id):
             f"Current status: '{order.status}'."
         )
 
+    if order.status == 'requested':
+        raise ValueError("Bill already requested.")
+
+    order.status = 'requested'
+    order.save(update_fields=['status'])
+
     return order

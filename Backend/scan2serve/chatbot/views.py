@@ -8,15 +8,6 @@ from .services import ask_chatbot
 
 
 class ChatbotAPIView(APIView):
-    """
-    POST /api/chat/
-
-    Body:
-    {
-        "message": "What menu items are available?"
-    }
-    """
-
     def post(self, request):
         if not settings.OPENAI_API_KEY:
             return Response(

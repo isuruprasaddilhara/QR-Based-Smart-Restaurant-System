@@ -1,36 +1,50 @@
-from rest_framework import generics, status
-from rest_framework.views import APIView
-from users.permissions import IsAdmin, IsKitchen, IsCashier, IsCustomer, IsAdminOrReadOnly, HasAnyRole
-from rest_framework.permissions import IsAuthenticated, SAFE_METHODS, AllowAny
-from rest_framework.response import Response
-from rest_framework.decorators import api_view, permission_classes
+import secrets
+
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.mail import EmailMessage
+from django.core.validators import validate_email
+from django.http import HttpResponse
 from django.shortcuts import get_object_or_404
+
+from rest_framework import generics, status
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.permissions import AllowAny
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from users.permissions import IsAdmin, IsKitchen, IsCashier, IsCustomer,IsStaff
+
+from .bill_generator import generate_bill_pdf, generate_thermal_pdf
 from .models import Order, Feedback
 from .serializers import (
     OrderSerializer,
     OrderCreateSerializer,
     OrderStatusSerializer,
     FeedbackSerializer,
+    CashierBillRequestSerializer
 )
 from .services import request_bill
-from .bill_generator import generate_bill_pdf, generate_thermal_pdf
-from django.http import HttpResponse
-from django.core.mail import EmailMessage
+from scan2serve.throttles import OrderCreateThrottle
+
+# ── Helpers / Mixins ───────────────────────────────────────────────────────────
 
 def get_order_for_request(request, pk):
     """
     Fetch an order and verify the requester is allowed to access it.
-    - Authenticated users: must own the order or be staff/admin
-    - Guests: must supply matching X-Guest-Token header
+    - Authenticated users: must own the order or be staff / non-customer role.
+    - Guests: must supply a matching X-Guest-Token header.
     """
     order = get_object_or_404(Order, pk=pk)
 
     if request.user.is_authenticated:
-        if request.user.is_staff or hasattr(request.user, 'role') and request.user.role != 'customer':
-            return order  # kitchen, cashier, admin bypass
+        # Staff, admin, kitchen, cashier roles bypass ownership check.
+        if request.user.is_staff or (
+            hasattr(request.user, 'role') and request.user.role != 'customer'
+        ):
+            return order
         if order.user == request.user:
             return order
-        from rest_framework.exceptions import PermissionDenied
         raise PermissionDenied("You do not have access to this order.")
 
     # Guest access via token
@@ -38,23 +52,38 @@ def get_order_for_request(request, pk):
     if guest_token and guest_token == order.guest_token:
         return order
 
-    from rest_framework.exceptions import PermissionDenied
     raise PermissionDenied("You do not have access to this order.")
 
-    def get_permissions(self):
-        if self.request.method == 'POST':
-            return [AllowAny]  # guests can create orders
-        return [IsAdmin | IsKitchen | IsCashier]
 
-    def perform_create(self, serializer):
-        user = self.request.user if self.request.user.is_authenticated else None
-        guest_token = None if user else secrets.token_urlsafe(32)
+class OrderAccessMixin:
+    """Convenience mixin so class-based views can call self.get_order(pk)."""
 
-        serializer.save(user=user, guest_token=guest_token)
+    def get_order(self, pk):
+        return get_order_for_request(self.request, pk)
+
+
+def _mark_order_completed(order):
+    """
+    Set order status to completed if not already.
+    Uses a queryset update to avoid a race condition, then syncs the
+    in-memory object so callers don't need to re-fetch.
+    """
+    if order.status != 'completed':
+        Order.objects.filter(pk=order.pk).update(status='completed')
+        order.status = 'completed'
+
+
+# ── Order Views ────────────────────────────────────────────────────────────────
 
 class OrderListCreateView(generics.ListCreateAPIView):
-    """List all orders or create a new order with items."""
-    queryset = Order.objects.prefetch_related('items__menu_item', 'feedback').all()
+    """List all orders (staff only) or create a new order with items."""
+    throttle_classes = [OrderCreateThrottle]
+    queryset = (
+        Order.objects
+        .select_related('user', 'table')
+        .prefetch_related('items__menu_item', 'feedback')
+        .all()
+    )
 
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -63,35 +92,44 @@ class OrderListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method == 'POST':
-            return [AllowAnonymous() | IsCustomer()]
-        
+            # Both guests (AllowAny) and authenticated customers may create orders.
+            return [AllowAny()]
         if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
             return [(IsAdmin | IsKitchen | IsCashier)()]
-
         return [IsAdmin()]
 
+    def perform_create(self, serializer):
+        user = self.request.user if self.request.user.is_authenticated else None
+        guest_token = None if user else secrets.token_urlsafe(32)
+        serializer.save(user=user, guest_token=guest_token)
 
-class OrderDetailView(generics.RetrieveUpdateDestroyAPIView):
+
+class OrderDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update, or delete a specific order."""
-    queryset = Order.objects.prefetch_related('items__menu_item', 'feedback').all()
+
+    queryset = (
+        Order.objects
+        .select_related('user', 'table__restaurant')
+        .prefetch_related('items__menu_item', 'feedback')
+        .all()
+    )
     serializer_class = OrderSerializer
+
     def get_permissions(self):
         if self.request.method == 'GET':
-            return [AllowAny()]  # access controlled manually in get_object
-        return [IsAdmin() | IsCashier()]
+            # Ownership / guest-token check is enforced in get_object().
+            return [AllowAny()]
+        return [(IsAdmin | IsCashier | IsKitchen)()]
 
     def get_object(self):
-        return get_order_for_request(self.request, self.kwargs['pk'])
+        return self.get_order(self.kwargs['pk'])
 
 
 class OrderStatusUpdateView(APIView):
-    
-    permission_classes = [IsAdmin | IsKitchen | IsCashier]
-    """
-    PATCH /orders/<pk>/status/
-    Update only the status of an order.
-    Body: { "status": "preparing" }
-    """
+    """PATCH /orders/<pk>/status/ — Update only the status of an order."""
+
+    permission_classes = [IsStaff]
+
     def patch(self, request, pk):
         order = get_object_or_404(Order, pk=pk)
         serializer = OrderStatusSerializer(order, data=request.data, partial=True)
@@ -101,41 +139,50 @@ class OrderStatusUpdateView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class FeedbackCreateView(generics.CreateAPIView):
+# ── Feedback Views ─────────────────────────────────────────────────────────────
+
+class FeedbackCreateView(OrderAccessMixin, generics.CreateAPIView):
     """POST /orders/<pk>/feedback/ — Submit feedback for a completed order."""
-    permission_classes = [AllowAny]
+
     serializer_class = FeedbackSerializer
 
     def perform_create(self, serializer):
-        order = get_object_or_404(Order, pk=self.kwargs['pk'])
+        # Re-use access control: owner, guest token, or staff only.
+        order = self.get_order(self.kwargs['pk'])
 
         if hasattr(order, 'feedback'):
-            from rest_framework.exceptions import ValidationError
             raise ValidationError("Feedback already exists for this order.")
 
         serializer.save(order=order)
 
+
 class FeedbackListView(generics.ListAPIView):
-    """GET /feedbacks/ — List all feedbacks."""
+    """GET /feedbacks/ — List all feedbacks (staff use)."""
+    permission_classes = [IsStaff]
     serializer_class = FeedbackSerializer
     queryset = Feedback.objects.select_related('order').all()
 
 
-class FeedbackDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [AllowAny]
+class FeedbackDetailView(OrderAccessMixin, generics.RetrieveUpdateAPIView):
     """GET/PATCH /orders/<pk>/feedback/detail/ — Retrieve or update feedback."""
+
+    permission_classes = [IsStaff]
     serializer_class = FeedbackSerializer
 
     def get_object(self):
+        # Validate the requester can access the parent order first.
+        self.get_order(self.kwargs['pk'])
         return get_object_or_404(Feedback, order__pk=self.kwargs['pk'])
 
+
+# ── Bill / Request-Bill Views ──────────────────────────────────────────────────
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def request_bill_view(request, order_id):
     """
     POST /orders/<order_id>/request-bill/
-    Marks the order as completed via the service layer.
+    Marks the order as bill-requested via the service layer.
     """
     try:
         order = request_bill(order_id)
@@ -145,30 +192,33 @@ def request_bill_view(request, order_id):
             'total_amount': order.total_amount,
             'status': order.status,
         })
-    except ValueError as e:
-        return Response({'error': str(e)}, status=400)
+    except ValueError as exc:
+        return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+class BillRequestedOrdersView(generics.ListAPIView):
+    serializer_class = CashierBillRequestSerializer
 
+    def get_queryset(self):
+        return (
+            Order.objects
+            .filter(status='requested')
+            .select_related('table', 'user')
+            .prefetch_related('items__menu_item')
+            .order_by('-created_at')
+        )
 
-# ── Bill Views ─────────────────────────────────────────────────────────────────
-
-def _mark_order_completed(order):
-    """Set order status to completed if not already, and save."""
-    if order.status != 'completed':
-        order.status = 'completed'
-        order.save(update_fields=['status'])
 
 @api_view(['POST'])
-@permission_classes([AllowAny])
+@permission_classes([IsCashier])
 def bill_soft_copy_view(request, order_id):
     """
     POST /orders/<order_id>/bill/soft/
-    Generate the bill PDF and email it to the customer.
+    Generate the bill PDF and e-mail it to the customer.
 
     Body (JSON):
         { "email": "customer@example.com" }
 
-    Access: same rules as order detail — owner, guest token, or staff.
+    Access: owner, guest token, or staff.
     """
     order = get_order_for_request(request, order_id)
 
@@ -176,6 +226,15 @@ def bill_soft_copy_view(request, order_id):
     if not email_to:
         return Response(
             {'error': 'An email address is required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # Validate e-mail format before attempting anything expensive.
+    try:
+        validate_email(email_to)
+    except DjangoValidationError:
+        return Response(
+            {'error': 'Invalid email address.'},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -190,8 +249,7 @@ def bill_soft_copy_view(request, order_id):
 
     restaurant = getattr(order.table, 'restaurant', None)
     rest_name  = getattr(restaurant, 'name', 'Scan2Serve Restaurant') if restaurant else 'Scan2Serve Restaurant'
-    from_email = getattr(restaurant, 'email', None) if restaurant else None
-    from_email = from_email or 'noreply@scan2serve.app'
+    from_email = (getattr(restaurant, 'email', None) if restaurant else None) or 'scan2serve.email@gmail.com'
     tbl_number = getattr(order.table, 'number', getattr(order.table, 'table_number', order.table.pk))
 
     try:
@@ -224,7 +282,7 @@ def bill_soft_copy_view(request, order_id):
 
 
 @api_view(['GET'])
-@permission_classes([AllowAny])
+@permission_classes([IsCashier])
 def bill_hard_copy_view(request, order_id):
     """
     GET /orders/<order_id>/bill/print/
@@ -232,9 +290,8 @@ def bill_hard_copy_view(request, order_id):
 
     Frontend usage:
         window.open(`/api/orders/${orderId}/bill/print/`, '_blank')
-        // the new tab loads the PDF and the user hits Ctrl+P (or auto-print via JS)
 
-    Access: same rules as order detail — owner, guest token, or staff.
+    Access: owner, guest token, or staff.
     """
     order = get_order_for_request(request, order_id)
 

@@ -92,3 +92,11 @@ class OrderStatusSerializer(serializers.ModelSerializer):
         if value not in valid:
             raise serializers.ValidationError(f"Status must be one of: {valid}")
         return value
+
+class CashierBillRequestSerializer(serializers.ModelSerializer):
+    table_id = serializers.IntegerField(source='table.id', read_only=True)
+    user_id = serializers.IntegerField(source='user.id', read_only=True)
+
+    class Meta:
+        model = Order
+        fields = ['id', 'table_id', 'user_id', 'total_amount', 'status']

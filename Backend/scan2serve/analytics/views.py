@@ -1,6 +1,5 @@
 from django.shortcuts import render
 
-# Create your views here.
 from django.db.models import (
     Sum, Count, Avg, F, ExpressionWrapper, DecimalField, IntegerField, DurationField
 )
@@ -110,7 +109,7 @@ class DashboardSummaryView(APIView):
             row['day'] = str(row['day'])
 
        # 5) Average order processing time
-        # pending -> served = created_at -> served_at
+       
         served_orders = Order.objects.filter(
             served_at__isnull=False,
             created_at__date__gte=start_date,
@@ -197,11 +196,11 @@ class DashboardSummaryView(APIView):
 
 
 class RevenueAnalyticsView(APIView):
-    """
-    Revenue grouped by day / week / month.
-    GET /analytics/revenue/?group_by=day&start=YYYY-MM-DD&end=YYYY-MM-DD
-    group_by options: day (default), week, month
-    """
+  
+    # Revenue grouped by day / week / month.
+    # GET /analytics/revenue/?group_by=day&start=YYYY-MM-DD&end=YYYY-MM-DD
+    # group_by options: day (default), week, month
+   
     permission_classes = [IsAuthenticated, IsAdminOrCashier]
 
     def get(self, request):
@@ -247,10 +246,9 @@ class RevenueAnalyticsView(APIView):
 
 
 class TopMenuItemsView(APIView):
-    """
-    Best-selling menu items by quantity and revenue.
-    GET /analytics/menu/top-items/?start=YYYY-MM-DD&end=YYYY-MM-DD&limit=10
-    """
+    # Best-selling menu items by quantity and revenue.
+    # GET /analytics/menu/top-items/?start=YYYY-MM-DD&end=YYYY-MM-DD&limit=10
+
     permission_classes = [IsAuthenticated, IsAdminOrCashier]
 
     def get(self, request):
@@ -281,10 +279,9 @@ class TopMenuItemsView(APIView):
 
 
 class CategoryRevenueView(APIView):
-    """
-    Revenue and sales volume broken down by menu category.
-    GET /analytics/menu/categories/?start=YYYY-MM-DD&end=YYYY-MM-DD
-    """
+    # Revenue and sales volume broken down by menu category.
+    # GET /analytics/menu/categories/?start=YYYY-MM-DD&end=YYYY-MM-DD
+ 
     permission_classes = [IsAuthenticated, IsAdminOrCashier]
 
     def get(self, request):
@@ -315,10 +312,9 @@ class CategoryRevenueView(APIView):
 
 
 class OrderStatusSummaryView(APIView):
-    """
-    Count of orders grouped by status.
-    GET /analytics/orders/status/?start=YYYY-MM-DD&end=YYYY-MM-DD
-    """
+    # Count of orders grouped by status.
+    # GET /analytics/orders/status/?start=YYYY-MM-DD&end=YYYY-MM-DD
+    
     permission_classes = [IsAuthenticated, IsAdminOrCashier]
 
     def get(self, request):
@@ -339,10 +335,9 @@ class OrderStatusSummaryView(APIView):
 
 
 class TablePerformanceView(APIView):
-    """
-    Orders and revenue per table.
-    GET /analytics/tables/?start=YYYY-MM-DD&end=YYYY-MM-DD
-    """
+    # Orders and revenue per table.
+    # GET /analytics/tables/?start=YYYY-MM-DD&end=YYYY-MM-DD
+
     permission_classes = [IsAuthenticated, IsAdminOrCashier]
 
     def get(self, request):
@@ -367,10 +362,8 @@ class TablePerformanceView(APIView):
 
 
 class FeedbackSummaryView(APIView):
-    """
-    Rating distribution and average score.
-    GET /analytics/feedback/?start=YYYY-MM-DD&end=YYYY-MM-DD
-    """
+    # Rating distribution and average score.
+    # GET /analytics/feedback/?start=YYYY-MM-DD&end=YYYY-MM-DD
     permission_classes = [IsAuthenticated, IsAdminOrCashier]
 
     def get(self, request):
@@ -403,10 +396,8 @@ class FeedbackSummaryView(APIView):
 
 
 class HourlyOrderPatternView(APIView):
-    """
-    Order volume and revenue broken down by hour of day.
-    GET /analytics/orders/hourly/?start=YYYY-MM-DD&end=YYYY-MM-DD
-    """
+    # Order volume and revenue broken down by hour of day.
+    # GET /analytics/orders/hourly/?start=YYYY-MM-DD&end=YYYY-MM-DD
     permission_classes = [IsAuthenticated, IsAdminOrCashier]
 
     def get(self, request):
@@ -432,10 +423,9 @@ class HourlyOrderPatternView(APIView):
 
 
 class LowStockMenuItemsView(APIView):
-    """
-    Menu items currently marked as unavailable.
-    GET /analytics/menu/unavailable/
-    """
+    # Menu items currently marked as unavailable.
+    # GET /analytics/menu/unavailable/
+    
     permission_classes = [IsAuthenticated, IsAdminOrCashier]
 
     def get(self, request):

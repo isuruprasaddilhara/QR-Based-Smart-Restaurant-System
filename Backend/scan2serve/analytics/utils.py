@@ -3,10 +3,10 @@ from django.utils.dateparse import parse_date
 
 
 def get_date_range(request):
-    """
-    Parse ?start=YYYY-MM-DD&end=YYYY-MM-DD from query params.
-    Defaults to the last 30 days when not provided.
-    """
+    
+    # Parse ?start=YYYY-MM-DD&end=YYYY-MM-DD from query params.
+    # Defaults to the last 30 days when not provided.
+   
     today = date.today()
     default_start = today - timedelta(days=30)
 

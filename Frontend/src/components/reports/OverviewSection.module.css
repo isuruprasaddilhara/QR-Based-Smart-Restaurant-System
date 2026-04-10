@@ -1,0 +1,108 @@
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.kpiCard {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--color-light--5);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+
+.kpiIcon {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.kpiIconGreen {
+  background: linear-gradient(145deg, #6fa889, #5a8f75);
+}
+
+.kpiIconOrange {
+  background: linear-gradient(145deg, #e09b4f, #c97d32);
+}
+
+.kpiIconPurple {
+  background: linear-gradient(145deg, #9b72c9, #7a5099);
+}
+
+.kpiIconPink {
+  background: linear-gradient(145deg, #d97b8f, #c45f78);
+}
+
+.kpiBody {
+  min-width: 0;
+}
+
+.kpiLabel {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-dark--2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.kpiValue {
+  margin: 0 0 6px;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--color-dark--0);
+  line-height: 1.2;
+}
+
+.revenueTrendFull {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin-bottom: 18px;
+  box-sizing: border-box;
+}
+
+.chartBoxClip {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.overviewSecondRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.feedbackCompact {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.feedbackStat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-dark--2);
+}
+
+.feedbackStat strong {
+  color: var(--color-dark--0);
+  font-size: 1rem;
+}

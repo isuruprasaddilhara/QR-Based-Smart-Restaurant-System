@@ -1,0 +1,259 @@
+.page {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 8px 32px;
+  min-height: 100%;
+}
+
+.dashShell {
+  background: #fff;
+  border-radius: 20px;
+  padding: 22px 20px 28px;
+  box-shadow: 0 8px 40px rgba(80, 60, 120, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.dashHeader {
+  margin-bottom: 16px;
+  padding: 0 4px;
+}
+
+.title {
+  margin: 0 0 6px;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--color-dark--0);
+}
+
+.subtitle {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--color-light--1);
+}
+
+.toolbar {
+  margin-bottom: 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dateGroup {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  font-size: 0.9rem;
+  color: var(--color-dark--2);
+}
+
+.input {
+  border: 1px solid var(--color-light--3);
+  border-radius: 12px;
+  padding: 8px 10px;
+  font-family: inherit;
+  background: #fff;
+}
+
+.sectionTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tabBtn {
+  border: 1px solid var(--color-light--3);
+  border-radius: 999px;
+  background: #fff;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--color-dark--2);
+}
+
+.activeTab {
+  border-color: var(--color-brand--1);
+  background: var(--color-brand--3);
+  color: #4a2d6b;
+}
+
+.errorBanner {
+  margin: 0 4px 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: #6b1c2e;
+  background: linear-gradient(
+    135deg,
+    rgba(220, 100, 120, 0.22),
+    rgba(197, 159, 227, 0.18)
+  );
+  border: 1px solid rgba(190, 80, 105, 0.45);
+  font-weight: 600;
+}
+
+.loading {
+  margin: 0 4px 14px;
+  color: var(--color-dark--2);
+}
+
+.cardTitle {
+  margin: 0 0 10px;
+}
+
+.grid2 {
+  margin: 0;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr));
+  align-items: stretch;
+}
+
+.card,
+.cardLarge {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 16px;
+  padding: 16px 18px;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.04);
+}
+
+.chartCard {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chartBox {
+  position: relative;
+  width: 100%;
+  min-height: 400px;
+  flex: 1;
+}
+
+.chartHero {
+  min-height: 340px;
+}
+
+@media (min-width: 900px) {
+  .chartHero {
+    min-height: 380px;
+  }
+}
+
+.chartBoxTall {
+  min-height: 440px;
+}
+
+.chartBoxWide {
+  min-height: 460px;
+}
+
+@media (min-width: 900px) {
+  .chartBoxTall {
+    min-height: 480px;
+  }
+
+  .chartBoxWide {
+    min-height: 500px;
+  }
+}
+
+.tablesCard {
+  margin: 0;
+}
+
+.card h3,
+.cardLarge h3 {
+  margin: 0 0 12px;
+  color: var(--color-dark--1);
+  font-size: 1rem;
+}
+
+.metric {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: 700;
+  color: var(--color-dark--0);
+}
+
+.listWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.listRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-light--5);
+  border: 1px solid var(--color-light--3);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+
+.feedbackRowPlain {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-light--3);
+  font-size: 0.92rem;
+}
+
+.feedbackRowPlain:last-child {
+  border-bottom: none;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-light--3);
+}
+
+.table th:nth-child(n + 2),
+.table td:nth-child(n + 2) {
+  text-align: right;
+}
+
+.table th {
+  color: var(--color-dark--2);
+  font-weight: 600;
+}
+
+.table tbody tr:nth-child(even) {
+  background: rgba(155, 114, 201, 0.04);
+}
+
+.table tbody tr:hover {
+  background: rgba(92, 150, 168, 0.08);
+}
+
+.table.tablePerf thead tr {
+  background: var(--color-light--5);
+}
+
+.table.tablePerf th {
+  border-bottom: 2px solid var(--color-light--3);
+}

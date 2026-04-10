@@ -1,0 +1,15 @@
+.feedbackTabLayout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 440px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.feedbackNarrow {
+  max-width: 400px;
+  width: 100%;
+  flex: none;
+}

@@ -1,0 +1,155 @@
+.page {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+  padding: 8px 0 20px;
+  box-sizing: border-box;
+}
+
+.card {
+  width: 100%;
+  max-width: 1100px;
+  padding: 24px;
+  box-sizing: border-box;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.title {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 700;
+  color: var(--color-dark--0);
+}
+
+.filterRow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.searchInput {
+  width: 100%;
+  max-width: 420px;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--color-light--3);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.searchInput:focus {
+  outline: none;
+  border-color: var(--color-brand--1);
+  box-shadow: 0 0 0 3px var(--color-brand--2);
+}
+
+/* Single full-width table (no second column) */
+.layout {
+  width: 100%;
+  min-width: 0;
+}
+
+.tablePane {
+  width: 100%;
+  border: 1px solid var(--color-light--3);
+  border-radius: 12px;
+  padding: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.table thead tr {
+  background: var(--color-light--5);
+}
+
+.table th,
+.table td {
+  text-align: left;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-light--3);
+  vertical-align: middle;
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--color-dark--2);
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.table tbody tr:hover {
+  background: rgba(155, 114, 201, 0.06);
+}
+
+.table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Phone + role readability */
+.table td:nth-child(3) {
+  white-space: nowrap;
+}
+
+.table td:nth-child(4) {
+  text-transform: capitalize;
+}
+
+.actions {
+  display: flex;
+  /* justify-content: flex-end; */
+  gap: 8px;
+  align-items: center;
+}
+
+.dangerBtn {
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  background: rgba(220, 38, 38, 0.12);
+  color: #b91c1c;
+}
+
+.dangerBtn:hover {
+  background: rgba(220, 38, 38, 0.2);
+}
+
+.errorText {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(201, 60, 60, 0.12);
+  color: #b91c1c;
+  font-size: 0.9rem;
+}
+
+.loadingText {
+  margin: 0;
+  color: var(--color-light--1);
+}
+
+@media (max-width: 700px) {
+  .card {
+    padding: 16px;
+  }
+}

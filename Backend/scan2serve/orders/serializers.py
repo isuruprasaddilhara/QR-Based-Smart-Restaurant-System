@@ -23,20 +23,6 @@ class FeedbackSerializer(serializers.ModelSerializer):
         model = Feedback
         fields = ['id', 'rating', 'comment']
 
-
-class OrderSerializer(serializers.ModelSerializer):
-    items = OrderItemSerializer(many=True, read_only=True)
-    feedback = FeedbackSerializer(read_only=True)
-
-    class Meta:
-        model = Order
-        fields = [
-            'id', 'table', 'user', 'status', 'total_amount',
-            'special_notes', 'created_at', 'items', 'feedback'
-        ]
-        read_only_fields = ['total_amount', 'created_at']
-
-
 class OrderCreateSerializer(serializers.ModelSerializer):
     items = OrderItemCreateSerializer(many=True, write_only=True)
     guest_token = serializers.CharField(read_only=True)
@@ -100,3 +86,15 @@ class CashierBillRequestSerializer(serializers.ModelSerializer):
     class Meta:
         model = Order
         fields = ['id', 'table_id', 'user_id', 'total_amount', 'status']
+
+class OrderSerializer(serializers.ModelSerializer):
+    items = OrderItemSerializer(many=True, read_only=True)
+    feedback = FeedbackSerializer(read_only=True)
+    user_email = serializers.EmailField(source='user.email', read_only=True)
+
+    class Meta:
+        model = Order
+        fields = [
+            'id', 'table', 'user', 'user_email', 'status', 'total_amount',
+            'special_notes', 'created_at', 'items', 'feedback'
+        ]

@@ -1,0 +1,43 @@
+/* .container {
+  display: flex;
+  align-items: center;
+  height: 90vh;
+  margin: 0px auto;
+  padding: 50px 0;
+  justify-content: center;
+
+  background-color: var(--color-brand--3);
+}
+
+img {
+  width: 50%;
+} */
+
+.wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  max-width: 960px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.heroImg {
+  flex: 1;
+  min-width: 360px;
+  max-width: 500px;
+  width: 100%;
+  height: auto;
+  border-radius: 16px;
+
+  object-fit: cover;
+}
+
+@media (max-width: 900px) {
+  .heroImg {
+    max-width: 100%;
+    order: -1;
+  }
+}

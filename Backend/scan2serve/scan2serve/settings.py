@@ -27,6 +27,8 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 load_dotenv(BASE_DIR / ".env")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+KITCHEN_ESP32_IP    = os.getenv("KITCHEN_ESP32_IP")
+ESP32_SECRET_TOKEN  = os.getenv("ESP32_SECRET_TOKEN")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 

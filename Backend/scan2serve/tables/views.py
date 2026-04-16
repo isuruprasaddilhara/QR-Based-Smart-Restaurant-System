@@ -6,8 +6,8 @@ from .models import Table
 from .serializers import TableSerializer
 from .services import create_table_with_qr, build_qr_image
 from users.permissions import IsAdmin, IsKitchen, IsCashier, IsAdminOrReadOnly
-
-
+from django.conf import settings
+from rest_framework.permissions import AllowAny
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAdmin | IsCashier])  

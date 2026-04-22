@@ -49,8 +49,29 @@ function ReportsPage() {
     [startDate, endDate],
   );
 
+  const rangeBackwards = Boolean(
+    startDate && endDate && startDate > endDate,
+  );
+
   useEffect(() => {
     let cancelled = false;
+
+    function clearAnalyticsState() {
+      setSummary(null);
+      setRevenueSeries([]);
+      setHourlySeries([]);
+      setTopItems([]);
+      setCategorySeries([]);
+      setFeedback(null);
+      setTablePerf([]);
+    }
+
+    const { start, end } = params;
+    if (start && end && start > end) {
+      clearAnalyticsState();
+      setLoading(false);
+      return;
+    }
 
     async function loadAll() {
       setLoading(true);
@@ -253,25 +274,32 @@ function ReportsPage() {
         </header>
 
         <div className={styles.toolbar}>
-          <div className={styles.dateGroup}>
-            <label className={styles.label}>
-              From
-              <input
-                className={styles.input}
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </label>
-            <label className={styles.label}>
-              To
-              <input
-                className={styles.input}
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </label>
+          <div className={styles.dateRow}>
+            <div className={styles.dateGroup}>
+              <label className={styles.label}>
+                From
+                <input
+                  className={styles.input}
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                />
+              </label>
+              <label className={styles.label}>
+                To
+                <input
+                  className={styles.input}
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                />
+              </label>
+            </div>
+            {rangeBackwards ? (
+              <p className={styles.rangeHint} role="status">
+                From must be on or before To.
+              </p>
+            ) : null}
           </div>
 
           <div className={styles.sectionTabs}>
@@ -291,7 +319,7 @@ function ReportsPage() {
         {error ? <p className={styles.errorBanner}>{error}</p> : null}
         {loading ? <p className={styles.loading}>Loading analytics…</p> : null}
 
-        {!loading && !error && (
+        {!loading && !error && !rangeBackwards && (
           <>
             {activeSection === "overview" && (
               <OverviewSection

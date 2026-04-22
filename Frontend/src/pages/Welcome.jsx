@@ -1,4 +1,4 @@
-import WelcomeCard from "../components/WelcomeCard";
+import WelcomeCard from "../components/auth/WelcomeCard";
 
 function Welcome() {
   return (

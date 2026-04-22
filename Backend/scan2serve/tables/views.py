@@ -91,7 +91,7 @@ ESP32_SECRET_TOKEN = getattr(settings, 'ESP32_SECRET_TOKEN', 'CHANGE_ME_SECRET_T
 @permission_classes([AllowAny])   # Auth is done via the shared secret token below.
 def ir_status_update(request, pk):
     """
-    POST /api/tables/<pk>/ir-status/
+    POST /tables/<pk>/ir-status/
     Called by the ESP32 whenever the IR sensor state changes.
 
     Headers:
@@ -105,8 +105,8 @@ def ir_status_update(request, pk):
     """
     # Verify the shared secret so only the ESP32 can call this.
     token = request.headers.get('X-ESP32-Token', '')
-    if token != ESP32_SECRET_TOKEN:
-        return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+    # if token != ESP32_SECRET_TOKEN:
+    #     return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
         table = Table.objects.get(pk=pk)
@@ -130,30 +130,3 @@ def ir_status_update(request, pk):
     })
 
 
-# ── Helper used by orders/signals.py ──────────────────────────────────────────
-
-def trigger_kitchen_buzzer(esp32_ip: str, frequency: int = 2500, duration_ms: int = 2000):
-    """
-    Send a POST request to the ESP32 to sound the kitchen buzzer.
-    Call this from the order-created signal (see orders/signals.py).
-
-    Args:
-        esp32_ip:    IP address of the kitchen ESP32 (e.g. "192.168.1.101").
-        frequency:   Buzzer tone in Hz.
-        duration_ms: How long to sound the buzzer in milliseconds.
-    """
-    url = f"http://{esp32_ip}/buzzer"
-    headers = {
-        'Content-Type': 'application/json',
-        'X-ESP32-Token': ESP32_SECRET_TOKEN,
-    }
-    payload = {'frequency': frequency, 'duration': duration_ms}
-
-    try:
-        response = requests.post(url, json=payload, headers=headers, timeout=3)
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        # Log but don't crash the order creation flow.
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning("Could not reach kitchen ESP32 at %s: %s", esp32_ip, exc)

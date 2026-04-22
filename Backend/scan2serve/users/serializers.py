@@ -115,7 +115,6 @@ class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
     def validate_email(self, value):
-        # We don't reveal whether the email exists — just silently succeed
         return value
 
     def save(self):
@@ -123,7 +122,7 @@ class ForgotPasswordSerializer(serializers.Serializer):
         try:
             user = User.objects.get(email=email)
         except User.DoesNotExist:
-            return None  # Silent — don't leak user existence
+            return None 
 
         token_generator = PasswordResetTokenGenerator()
         token = token_generator.make_token(user)

@@ -28,8 +28,8 @@ staticfiles/
 static/
 
 # Migrations (optional: keep __init__.py)
-**/migrations/*
-!**/migrations/__init__.py
+**/migrations/__pycache__/
+**/migrations/*.pyc
 
 # Virtual environments
 venv/

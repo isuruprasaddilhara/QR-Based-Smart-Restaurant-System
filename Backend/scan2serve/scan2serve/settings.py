@@ -18,7 +18,7 @@ os.makedirs(BASE_DIR / "logs", exist_ok=True)
 
 # SECURITY
 SECRET_KEY = os.getenv("SECRET_KEY")
-DEBUG = os.getenv("DEBUG", "False") == "True"
+DEBUG = os.getenv("DEBUG")
 
 ALLOWED_HOSTS = [
     ".onrender.com",

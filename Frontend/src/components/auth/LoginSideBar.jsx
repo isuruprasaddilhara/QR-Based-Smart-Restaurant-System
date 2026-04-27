@@ -82,7 +82,7 @@ function LoginSideBar() {
     <div className={styles.container}>
       <div className={styles.header}>
         <Logo imgPath="/image2.png" width="72px" />
-        <h1 className={styles.title}>Admin login</h1>
+        <h1 className={styles.title}>Login</h1>
         <p className={styles.lead}>Sign in to manage menu and orders.</p>
       </div>
 

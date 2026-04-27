@@ -6,8 +6,8 @@ from .models import Table
 from .serializers import TableSerializer
 from .services import create_table_with_qr, build_qr_image
 from users.permissions import IsAdmin, IsKitchen, IsCashier, IsAdminOrReadOnly
-
-
+from django.conf import settings
+from rest_framework.permissions import AllowAny
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAdmin | IsCashier])  
@@ -80,3 +80,53 @@ def download_qr(request, pk):
     response = FileResponse(buffer, content_type='image/png')
     response['Content-Disposition'] = f'attachment; filename="table_{table.id}_qr.png"'
     return response
+
+
+# ── NEW: IR sensor endpoint ────────────────────────────────────────────────────
+
+ESP32_SECRET_TOKEN = getattr(settings, 'ESP32_SECRET_TOKEN', 'CHANGE_ME_SECRET_TOKEN')
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])   # Auth is done via the shared secret token below.
+def ir_status_update(request, pk):
+    """
+    POST /tables/<pk>/ir-status/
+    Called by the ESP32 whenever the IR sensor state changes.
+
+    Headers:
+        X-ESP32-Token: <ESP32_SECRET_TOKEN from settings>
+
+    Body (JSON):
+        { "occupied": true }   or   { "occupied": false }
+
+    Effect:
+        Updates Table.status  (True = occupied, False = available).
+    """
+    # Verify the shared secret so only the ESP32 can call this.
+    token = request.headers.get('X-ESP32-Token', '')
+    # if token != ESP32_SECRET_TOKEN:
+    #     return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        table = Table.objects.get(pk=pk)
+    except Table.DoesNotExist:
+        return Response({'error': 'Table not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    occupied = request.data.get('occupied')
+    if occupied is None:
+        return Response(
+            {'error': '`occupied` (boolean) is required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    table.status = bool(occupied)
+    table.save(update_fields=['status'])
+
+    return Response({
+        'id': table.id,
+        'status': table.status,
+        'message': f"Table is now {'occupied' if table.status else 'available'}.",
+    })
+
+

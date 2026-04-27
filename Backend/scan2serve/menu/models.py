@@ -16,6 +16,14 @@ class MenuItem(models.Model):
     image_url = models.URLField(blank=True)
     ingredients = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    image = models.ImageField(upload_to='menu_images/', blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+        if self.image:
+            self.image_url = self.image.url
+            super().save(update_fields=['image_url'])
 
     def __str__(self):
         return self.name

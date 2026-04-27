@@ -1,5 +1,6 @@
 import secrets
-
+from django.conf import settings
+import requests
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import EmailMessage
 from django.core.validators import validate_email
@@ -102,6 +103,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
         user = self.request.user if self.request.user.is_authenticated else None
         guest_token = None if user else secrets.token_urlsafe(32)
         serializer.save(user=user, guest_token=guest_token)
+        esp32_ip = getattr(settings, 'KITCHEN_ESP32_IP', None)
+        from orders.services import trigger_kitchen_buzzer
+        #logger.info("New order #%s created — triggering kitchen buzzer at %s", instance.pk, esp32_ip)
+        trigger_kitchen_buzzer(esp32_ip, frequency=2500, duration_ms=2000)
 
 
 class OrderDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):

@@ -250,7 +250,8 @@ class ForgotPasswordView(APIView):
         result = serializer.save()
 
         if result:
-            reset_link = f"http://localhost:8000/users/auth/reset-password/?uid={result['uid']}&token={result['token']}"
+            reset_link = f"http://localhost:3000/reset-password-confirm?uid={result['uid']}&token={result['token']}"
+            # f"http://localhost:3000/users/auth/reset-password/?uid={result['uid']}&token={result['token']}"
 
             send_mail(
                 subject='Password Reset Request',

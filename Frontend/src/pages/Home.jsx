@@ -1,11 +1,11 @@
 // import { useNavigate } from "react-router-dom";
 // import { useState } from "react";
 
-// import HomeNav from "../components/HomeNav";
+// import HomeNav from "../components/navigation/HomeNav";
 // import Button from "../components/Button";
-// import Orders from "../components/Orders";
-// import Menu from "../components/Menu";
-// import Tables from "../components/Tables";
+// import Orders from "../components/orders/Orders";
+// import Menu from "../components/menu/Menu";
+// import Tables from "../components/tables/Tables";
 
 // import styles from "./Home.module.css";
 
@@ -40,14 +40,14 @@ import { useState, useRef, useEffect } from "react";
 
 import { canAccess } from "../repository/roleAccess";
 
-import HomeNav from "../components/HomeNav";
-import Logo from "../components/Logo";
-import Orders from "../components/Orders";
-import Menu from "../components/Menu";
-import Tables from "../components/Tables";
-import Reports from "../components/Reports";
-import ManageAccounts from "../components/ManageAccounts";
-import AccountSettings from "../components/AccountSettings";
+import HomeNav from "../components/navigation/HomeNav";
+import Logo from "../components/shared/Logo";
+import Orders from "../components/orders/Orders";
+import Menu from "../components/menu/Menu";
+import Tables from "../components/tables/Tables";
+import Reports from "../components/reports/Reports";
+import ManageAccounts from "../components/accounts/ManageAccounts";
+import AccountSettings from "../components/accounts/AccountSettings";
 
 import {
   clearStoredAuth,
@@ -55,6 +55,8 @@ import {
   getStoredRole,
   isAdminSession,
 } from "../repository/auth";
+
+import { useEscapeKey } from "../hooks/useEscapeKey";
 
 import { FaChevronDown } from "react-icons/fa";
 
@@ -105,6 +107,8 @@ function Homepage() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEscapeKey(profileOpen, () => setProfileOpen(false));
 
   useEffect(() => {
     const fallback = "settings";

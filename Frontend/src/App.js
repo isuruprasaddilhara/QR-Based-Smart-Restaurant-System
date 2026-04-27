@@ -3,8 +3,10 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import Homepage from "./pages/Home";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
-import Welcome from "./pages/Welcome";
-import AdminSignupRoute from "./components/AdminSignupRoute";
+import AdminSignupRoute from "./components/auth/AdminSignupRoute";
+import SessionHandler from "./components/shared/SessionHandler";
+import PasswordResetConfirm from "./pages/PasswordResetConfirm";
+
 
 import "./App.css";
 
@@ -15,11 +17,12 @@ function App() {
         <p>Scan2Serve</p>
       </header> */}
       <BrowserRouter>
+        <SessionHandler />
         <Routes>
-          <Route path="/" element={<Homepage />} />
+          <Route path="/" element={<Login />} />
           <Route path="/home" element={<Homepage />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/welcome" element={<Welcome />} />
+          <Route path="/reset-password-confirm" element={<PasswordResetConfirm />} />
           <Route
             path="/signup"
             element={

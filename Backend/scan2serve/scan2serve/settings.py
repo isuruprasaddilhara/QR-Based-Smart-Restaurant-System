@@ -17,13 +17,19 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 import environ
+import dj_database_url
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 load_dotenv(BASE_DIR / ".env")
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+KITCHEN_ESP32_IP    = os.getenv("KITCHEN_ESP32_IP")
+ESP32_SECRET_TOKEN  = os.getenv("ESP32_SECRET_TOKEN")
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -33,7 +39,7 @@ SECRET_KEY = 'django-insecure-)46)7jga7s+o32i(m_n6)i_wuzupuct*l0jr#%c-$ku3p_3#8j
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['10.79.98.134', 'localhost', '127.0.0.1', '10.79.98.147']
 
 
 # Application definition
@@ -115,7 +121,7 @@ env = environ.Env()
 environ.Env.read_env()
 
 DATABASES = {
-    'default': env.db('DATABASE_URL')
+    'default':  dj_database_url.parse(os.getenv('DATABASE_URL'))
 }
 
 # Password validation

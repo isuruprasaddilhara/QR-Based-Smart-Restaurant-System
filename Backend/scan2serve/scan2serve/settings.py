@@ -28,6 +28,7 @@ ALLOWED_HOSTS = [
 
 CSRF_TRUSTED_ORIGINS = [
     "https://*.onrender.com",
+    "https://scan2serve-frontend-ix17.onrender.com",
 ]
 
 # MEDIA FILES
@@ -186,10 +187,7 @@ CORS_ALLOW_ALL_ORIGINS = False
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
-
-    # Add your deployed frontend URL here later
-    # Example:
-    # "https://your-frontend-name.onrender.com",
+    "https://scan2serve-frontend-ix17.onrender.com",
 ]
 
 # EMAIL

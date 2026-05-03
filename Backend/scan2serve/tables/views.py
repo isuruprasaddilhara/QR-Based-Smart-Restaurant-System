@@ -84,7 +84,7 @@ def download_qr(request, pk):
 
 # ── NEW: IR sensor endpoint ────────────────────────────────────────────────────
 
-ESP32_SECRET_TOKEN = getattr(settings, 'ESP32_SECRET_TOKEN', 'CHANGE_ME_SECRET_TOKEN')
+ESP32_SECRET_TOKEN = getattr(settings, "ESP32_SECRET_TOKEN", None)
 
 
 @api_view(['POST'])

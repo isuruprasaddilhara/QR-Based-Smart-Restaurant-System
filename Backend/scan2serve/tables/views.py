@@ -84,7 +84,7 @@ def download_qr(request, pk):
 
 # ── NEW: IR sensor endpoint ────────────────────────────────────────────────────
 
-ESP32_SECRET_TOKEN = getattr(settings, "ESP32_SECRET_TOKEN", None)
+
 
 
 @api_view(['POST'])
@@ -104,8 +104,10 @@ def ir_status_update(request, pk):
         Updates Table.status  (True = occupied, False = available).
     """
     # Verify the shared secret so only the ESP32 can call this.
-    token = request.headers.get('X-ESP32-Token', '')
-    if token != ESP32_SECRET_TOKEN:
+    token = request.headers.get('X-ESP32-Token', '').strip()
+    expected_token = settings.ESP32_SECRET_TOKEN
+
+    if token != expected_token:
         return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
 
     try:

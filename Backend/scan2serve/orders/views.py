@@ -103,10 +103,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
         user = self.request.user if self.request.user.is_authenticated else None
         guest_token = None if user else secrets.token_urlsafe(32)
         serializer.save(user=user, guest_token=guest_token)
-        esp32_ip = getattr(settings, 'KITCHEN_ESP32_IP', None)
-        from orders.services import trigger_kitchen_buzzer
-        #logger.info("New order #%s created — triggering kitchen buzzer at %s", instance.pk, esp32_ip)
-        trigger_kitchen_buzzer(esp32_ip, frequency=2500, duration_ms=2000)
+        # esp32_ip = getattr(settings, 'KITCHEN_ESP32_IP', None)
+        # from orders.services import trigger_kitchen_buzzer
+        # #logger.info("New order #%s created — triggering kitchen buzzer at %s", instance.pk, esp32_ip)
+        # trigger_kitchen_buzzer(esp32_ip, frequency=2500, duration_ms=2000)
 
 
 class OrderDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):
@@ -313,3 +313,93 @@ def bill_hard_copy_view(request, order_id):
     response['Content-Disposition'] = f'inline; filename="bill_order_{order_id}.pdf"'
     response['Content-Length'] = len(pdf_bytes)
     return response
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def iot_new_orders_view(request):
+    """
+    ESP32 polls this endpoint to check whether new orders were created.
+
+    Example:
+    GET /orders/iot/new-orders/?last_id=5
+
+    Header:
+    X-ESP32-Token: your-secret-token
+
+    Response:
+    {
+        "new_orders": true,
+        "count": 2,
+        "latest_order_id": 7,
+        "orders": [...]
+    }
+    """
+
+    expected_token = getattr(settings, "ESP32_SECRET_TOKEN", None)
+    received_token = request.headers.get("X-ESP32-Token", "")
+
+    if not expected_token:
+        return Response(
+            {"error": "ESP32_SECRET_TOKEN is not configured on the server."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    if received_token != expected_token:
+        return Response(
+            {"error": "Forbidden"},
+            status=status.HTTP_403_FORBIDDEN
+        )
+
+    try:
+        last_id = int(request.query_params.get("last_id", "0"))
+    except ValueError:
+        return Response(
+            {"error": "last_id must be a number."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    if last_id < 0:
+        return Response(
+            {"error": "last_id cannot be negative."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    new_orders_qs = (
+        Order.objects
+        .filter(id__gt=last_id)
+        .select_related("table", "user")
+        .order_by("id")
+    )
+
+    latest_order = Order.objects.order_by("-id").first()
+    latest_order_id = latest_order.id if latest_order else last_id
+    latest_order_id = max(latest_order_id, last_id)
+
+    new_count = new_orders_qs.count()
+
+    orders_data = []
+    for order in new_orders_qs[:10]:
+        table = getattr(order, "table", None)
+
+        table_number = None
+        if table:
+            table_number = (
+                getattr(table, "number", None)
+                or getattr(table, "table_number", None)
+                or getattr(table, "id", None)
+            )
+
+        orders_data.append({
+            "id": order.id,
+            "table": table_number,
+            "status": order.status,
+            "created_at": order.created_at,
+        })
+
+    return Response({
+        "new_orders": new_count > 0,
+        "count": new_count,
+        "latest_order_id": latest_order_id,
+        "orders": orders_data,
+    }, status=status.HTTP_200_OK)

@@ -10,6 +10,7 @@ from .views import (
     bill_soft_copy_view,
     bill_hard_copy_view,
     BillRequestedOrdersView,
+    iot_new_orders_view,
 
 )
 
@@ -25,4 +26,6 @@ urlpatterns = [
 
     path('<int:order_id>/bill/soft/', bill_soft_copy_view, name='bill-soft'),
     path('<int:order_id>/bill/print/', bill_hard_copy_view, name='bill-hard-copy'),
+
+    path('iot/new-orders/', iot_new_orders_view, name='iot-new-orders'),
 ]

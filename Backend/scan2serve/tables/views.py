@@ -105,8 +105,8 @@ def ir_status_update(request, pk):
     """
     # Verify the shared secret so only the ESP32 can call this.
     token = request.headers.get('X-ESP32-Token', '')
-    # if token != ESP32_SECRET_TOKEN:
-    #     return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
+    if token != ESP32_SECRET_TOKEN:
+        return Response({'error': 'Forbidden.'}, status=status.HTTP_403_FORBIDDEN)
 
     try:
         table = Table.objects.get(pk=pk)

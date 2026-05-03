@@ -19,7 +19,7 @@ os.makedirs(BASE_DIR / "logs", exist_ok=True)
 # SECURITY
 SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = os.getenv("DEBUG")
-ESP32_SECRET_TOKEN = os.environ.get("ESP32_SECRET_TOKEN")
+ESP32_SECRET_TOKEN = os.getenv("ESP32_SECRET_TOKEN")
 
 ALLOWED_HOSTS = [
     ".onrender.com",

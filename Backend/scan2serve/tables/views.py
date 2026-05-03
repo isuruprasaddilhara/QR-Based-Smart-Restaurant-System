@@ -84,9 +84,6 @@ def download_qr(request, pk):
 
 # ── NEW: IR sensor endpoint ────────────────────────────────────────────────────
 
-
-
-
 @api_view(['POST'])
 @permission_classes([AllowAny])   # Auth is done via the shared secret token below.
 def ir_status_update(request, pk):

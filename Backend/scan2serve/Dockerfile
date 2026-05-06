@@ -15,11 +15,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . .
 
-# Load env variables
+# Set Django settings
 ENV DJANGO_SETTINGS_MODULE=scan2serve.settings
 
-# Collect static
+# Collect static files
 RUN python manage.py collectstatic --noinput
 
-# Run server
+# Run Gunicorn
 CMD ["gunicorn", "--workers=3", "--bind=0.0.0.0:8000", "scan2serve.wsgi:application"]

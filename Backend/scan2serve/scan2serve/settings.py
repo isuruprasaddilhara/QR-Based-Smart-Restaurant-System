@@ -25,7 +25,7 @@ ALLOWED_HOSTS = [
     ".onrender.com",
     "localhost",
     "127.0.0.1",
-    "192.168.231.129",
+    "34.56.171.22",
 ]
 
 CSRF_TRUSTED_ORIGINS = [

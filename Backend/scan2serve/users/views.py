@@ -17,6 +17,7 @@ from users.models import User
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.exceptions import TokenError
 from scan2serve.throttles import LoginAnonThrottle, LoginUserThrottle, RegisterThrottle, PasswordResetThrottle
+from django.conf import settings
 
 class LoginView(APIView):
     throttle_classes = [LoginAnonThrottle, LoginUserThrottle]

@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   backend:
-    build: ./Backend
+    build: ./Backend/scan2serve
     container_name: django_backend
     env_file:
       - ./Backend/scan2serve/.env

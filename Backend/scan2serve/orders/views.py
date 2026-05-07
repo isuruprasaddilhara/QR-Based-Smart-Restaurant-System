@@ -417,3 +417,11 @@ class UserOrderListView(generics.ListAPIView):
             .prefetch_related('items__menu_item', 'feedback')
             .order_by('-created_at')
         )
+
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response({
+            'orders_count': queryset.count(),
+            'orders': serializer.data,
+        })

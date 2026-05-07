@@ -403,3 +403,17 @@ def iot_new_orders_view(request):
         "latest_order_id": latest_order_id,
         "orders": orders_data,
     }, status=status.HTTP_200_OK)
+
+
+class UserOrderListView(generics.ListAPIView):
+    """GET /orders/my-orders/ — List all orders for the authenticated user (latest first)."""
+    serializer_class = OrderSerializer
+
+    def get_queryset(self):
+        return (
+            Order.objects
+            .filter(user=self.request.user)
+            .select_related('user', 'table')
+            .prefetch_related('items__menu_item', 'feedback')
+            .order_by('-created_at')
+        )

@@ -20,9 +20,19 @@ services:
     volumes:
       - static_volume:/static
       - media_volume:/app/media
+      - certbot_etc:/etc/letsencrypt
+      - certbot_var:/var/www/certbot
     depends_on:
       - backend
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot_etc:/etc/letsencrypt
+      - certbot_var:/var/www/certbot
 
 volumes:
   static_volume:
   media_volume:
+  certbot_etc:
+  certbot_var:

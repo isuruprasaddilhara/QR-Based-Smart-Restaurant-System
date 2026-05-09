@@ -27,11 +27,13 @@ ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "34.66.44.131",
+    "scan2serve.online"
 ]
 
 CSRF_TRUSTED_ORIGINS = [
     "https://*.onrender.com",
     "https://scan2serve-frontend-ix17.onrender.com",
+    "https://scan2serve.online"
 ]
 
 # MEDIA FILES
@@ -191,6 +193,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
     "https://scan2serve-frontend-ix17.onrender.com",
+    "https://scan2serve.online",
 ]
 
 # EMAIL

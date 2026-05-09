@@ -17,19 +17,20 @@ services:
       dockerfile: nginx/Dockerfile
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - static_volume:/static
       - media_volume:/app/media
-      - certbot_etc:/etc/letsencrypt
-      - certbot_var:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
     depends_on:
       - backend
 
   certbot:
     image: certbot/certbot
     volumes:
-      - certbot_etc:/etc/letsencrypt
-      - certbot_var:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
 
 volumes:
   static_volume:

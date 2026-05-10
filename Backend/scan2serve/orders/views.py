@@ -92,12 +92,12 @@ class OrderListCreateView(generics.ListCreateAPIView):
         return OrderSerializer
 
     def get_permissions(self):
-        if self.request.method == 'POST':
-            # Both guests (AllowAny) and authenticated customers may create orders.
+        if self.request.method == 'GET':
             return [AllowAny()]
-        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
-            return [(IsAdmin | IsKitchen | IsCashier)()]
-        return [IsAdmin()]
+        if self.request.method == 'DELETE':
+            # Ownership enforced in get_object() via get_order_for_request
+            return [AllowAny()]
+        return [(IsAdmin | IsCashier | IsKitchen)()]
 
     def perform_create(self, serializer):
         user = self.request.user if self.request.user.is_authenticated else None
@@ -171,7 +171,12 @@ class FeedbackListView(generics.ListAPIView):
 class FeedbackDetailView(OrderAccessMixin, generics.RetrieveUpdateAPIView):
     """GET/PATCH /orders/<pk>/feedback/detail/ — Retrieve or update feedback."""
 
-    permission_classes = [IsStaff]
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            # Ownership / guest-token check is enforced in get_object()
+            return [AllowAny()]
+        return [IsStaff()]
+
     serializer_class = FeedbackSerializer
 
     def get_object(self):
@@ -425,3 +430,26 @@ class UserOrderListView(generics.ListAPIView):
             'orders_count': queryset.count(),
             'orders': serializer.data,
         })
+
+class FeedbackDeleteView(OrderAccessMixin, generics.DestroyAPIView):
+    """DELETE /orders/<pk>/feedback/ — Owner or guest deletes their own feedback."""
+
+    permission_classes = [AllowAny]
+
+    def get_object(self):
+        # get_order() enforces ownership / guest-token check on the parent order
+        self.get_order(self.kwargs['pk'])
+        return get_object_or_404(Feedback, order__pk=self.kwargs['pk'])
+
+class CustomerFeedbackListView(generics.ListAPIView):
+    """GET /feedbacks/my-feedbacks/ — List all feedbacks for the authenticated customer."""
+    serializer_class = FeedbackSerializer
+    permission_classes = [IsCustomer]
+
+    def get_queryset(self):
+        return (
+            Feedback.objects
+            .filter(order__user=self.request.user)
+            .select_related('order')
+            .order_by('-order__created_at')
+        )

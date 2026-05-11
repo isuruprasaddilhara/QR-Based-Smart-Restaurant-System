@@ -66,6 +66,7 @@ INSTALLED_APPS = [
     "orders",
     "chatbot",
     "analytics",
+    'anymail',
 ]
 
 # MIDDLEWARE
@@ -200,11 +201,15 @@ CORS_ALLOWED_ORIGINS = [
     "https://scan2serve.online",
 ]
 
+# ANYMAIL = {
+#     "MAILJET_API_KEY": os.getenv("MAILJET_API_KEY"),
+#     "MAILJET_SECRET_KEY": os.getenv("MAILJET_SECRET_KEY"),
+# }
+# EMAIL_BACKEND = "anymail.backends.mailjet.EmailBackend"
 ANYMAIL = {
-    "MAILJET_API_KEY": os.getenv("MAILJET_API_KEY"),
-    "MAILJET_SECRET_KEY": os.getenv("MAILJET_SECRET_KEY"),
+    "BREVO_API_KEY": os.getenv("BREVO_API_KEY"),
 }
-EMAIL_BACKEND = "anymail.backends.mailjet.EmailBackend"
+EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
 DEFAULT_FROM_EMAIL = os.getenv("EMAIL_HOST_USER")
 
 # Tells Django to trust the X-Forwarded-Proto header from Nginx

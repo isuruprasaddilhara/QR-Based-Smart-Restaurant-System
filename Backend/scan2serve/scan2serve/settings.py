@@ -63,6 +63,8 @@ INSTALLED_APPS = [
     "menu",
     "tables",
     "orders",
+    "chatbot",
+    "analytics",
 ]
 
 # MIDDLEWARE

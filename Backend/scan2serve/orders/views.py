@@ -92,10 +92,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
         return OrderSerializer
 
     def get_permissions(self):
+        # List all orders: staff only. Create order: guest or anyone (handled in perform_create).
         if self.request.method == 'GET':
-            return [AllowAny()]
-        if self.request.method == 'DELETE':
-            # Ownership enforced in get_object() via get_order_for_request
+            return [IsStaff()]
+        if self.request.method == 'POST':
             return [AllowAny()]
         return [(IsAdmin | IsCashier | IsKitchen)()]
 
@@ -103,10 +103,6 @@ class OrderListCreateView(generics.ListCreateAPIView):
         user = self.request.user if self.request.user.is_authenticated else None
         guest_token = None if user else secrets.token_urlsafe(32)
         serializer.save(user=user, guest_token=guest_token)
-        # esp32_ip = getattr(settings, 'KITCHEN_ESP32_IP', None)
-        # from orders.services import trigger_kitchen_buzzer
-        # #logger.info("New order #%s created — triggering kitchen buzzer at %s", instance.pk, esp32_ip)
-        # trigger_kitchen_buzzer(esp32_ip, frequency=2500, duration_ms=2000)
 
 
 class OrderDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):

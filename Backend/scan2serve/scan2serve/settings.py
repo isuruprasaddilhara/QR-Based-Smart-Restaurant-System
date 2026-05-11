@@ -27,7 +27,8 @@ ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "34.66.44.131",
-    "scan2serve.online"
+    "scan2serve.online",
+    "10.0.2.2",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -189,11 +190,12 @@ SIMPLE_JWT = {
 }
 
 # CORS
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://10.0.2.2:5173",
     "https://scan2serve-frontend-ix17.onrender.com",
     "https://scan2serve.online",
 ]

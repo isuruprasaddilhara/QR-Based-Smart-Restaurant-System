@@ -2,7 +2,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional
 
 from django.conf import settings
-from django.db.models import Avg, Count, Q, Sum
+from django.db.models import Avg, Count, Max, Min, Q, Sum
 from openai import OpenAI
 
 from menu.models import MenuItem, MenuCategory
@@ -11,107 +11,9 @@ from orders.models import Order, OrderItem, Feedback
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
 
-# ============================================================
-# INTENT MAP  –  single source of truth for keyword routing
-# ============================================================
-
-INTENT_MAP: Dict[str, List[str]] = {
-    "popular_dishes":     [
-        "most ordered", "popular dish", "popular dishes", "best selling",
-        "top selling", "most popular", "most ordered dish", "what sells",
-    ],
-    "top_rated_dishes":   [
-        "top rated", "best rated", "highest rated", "best dish",
-        "most loved", "customer favourite", "fan favourite",
-    ],
-    "dish_contents":      [
-        "ingredient", "ingredients", "what is in", "what's in",
-        "contains", "content of", "made of", "made with",
-    ],
-    "dietary":            [
-        "vegan", "vegetarian", "gluten", "halal", "kosher",
-        "spicy", "dairy", "nut-free", "lactose", "allerg",
-        "without meat", "no meat", "sugar-free", "low calorie",
-        "healthy", "keto", "paleo",
-    ],
-    "dish_price":         [
-        "price", "cost", "how much", "expensive", "cheap",
-        "affordable", "what does it cost",
-    ],
-    "menu_lookup":        [
-        "available", "availability", "do you have", "menu",
-        "show menu", "full menu", "what do you serve", "what can i order",
-        "what food", "what dishes",
-    ],
-    "categories":         [
-        "category", "categories", "types of food", "sections",
-        "what kind of food",
-    ],
-    "user_orders":        [
-        "my order", "my orders", "order status", "recent orders",
-        "my recent order", "what did i order", "order history",
-    ],
-    "order_tracking":     [
-        "track", "where is my order", "order #", "order number",
-        "how long", "when will", "is my order ready", "eta",
-        "status of order",
-    ],
-    "order_stats":        [
-        "sales", "total orders", "order stats", "statistics",
-        "analytics", "revenue", "performance", "how many orders",
-    ],
-    "specials":           [
-        "special", "deal", "offer", "discount", "promo",
-        "promotion", "today's special", "happy hour", "combo",
-        "limited time",
-    ],
-    "recommendations":    [
-        "recommend", "suggestion", "what should i order",
-        "surprise me", "what's good", "what do you suggest",
-        "help me choose", "best for me", "what would you recommend",
-    ],
-    "restaurant_info":    [
-        "open", "opening hours", "hours", "close", "closing",
-        "address", "location", "where are you", "contact",
-        "phone", "email", "wifi", "parking", "about",
-        "tell me about", "how to get", "directions",
-    ],
-    "table_availability": [
-        "reserve", "book", "reservation", "seat", "table for",
-        "available table", "book a table", "make a reservation",
-        "capacity",
-    ],
-    "feedback":           [
-        "complaint", "feedback", "review", "bad experience",
-        "rate", "rating", "not happy", "problem", "issue",
-        "wrong order", "cold food", "rude staff", "complain",
-    ],
-    "payment":            [
-        "pay", "payment", "cash", "card", "credit card",
-        "debit card", "online payment", "split bill",
-        "bill", "invoice", "receipt", "tip",
-    ],
-    "delivery":           [
-        "deliver", "delivery", "takeaway", "take away",
-        "takeout", "take out", "home delivery", "order online",
-        "delivery time", "delivery fee", "delivery area",
-        "can you deliver",
-    ],
-    "catering":           [
-        "cater", "catering", "event", "party", "bulk order",
-        "large order", "corporate", "wedding", "birthday",
-    ],
-    "nutrition":          [
-        "calorie", "calories", "nutrition", "nutritional",
-        "protein", "carb", "fat", "sodium", "fiber",
-        "macro", "healthy option",
-    ],
-}
-
-
-# ============================================================
+# ----------------------------
 # Small helpers
-# ============================================================
+# ----------------------------
 
 def money(value) -> str:
     if value is None:
@@ -131,28 +33,51 @@ def contains_any(text: str, words: List[str]) -> bool:
 
 
 def extract_keywords(message: str) -> List[str]:
+    STOPWORDS = {
+        "the", "and", "for", "are", "you", "that", "this", "with",
+        "have", "from", "can", "what", "which", "how", "does", "any",
+        "your", "our", "its", "not", "but", "also", "has", "get",
+        "will", "please", "want", "need", "like", "tell", "show",
+        "give", "make", "dish", "food", "meal", "item", "items",
+    }
     cleaned = (
         normalize(message)
         .replace(",", " ").replace(".", " ").replace("?", " ")
         .replace("!", " ").replace("-", " ").replace("'", " ")
+        .replace("(", " ").replace(")", " ")
     )
-    words = [w.strip() for w in cleaned.split() if len(w.strip()) >= 3]
+    words = [
+        w.strip() for w in cleaned.split()
+        if len(w.strip()) >= 3 and w.strip() not in STOPWORDS
+    ]
     return list(dict.fromkeys(words))
 
 
-def detect_intent(message: str) -> str:
+def parse_budget(message: str) -> Optional[float]:
+    """Extract a budget figure from a message like 'under $20' or 'less than 500'."""
+    import re
+    patterns = [
+        r"under\s*\$?\s*(\d+(?:\.\d+)?)",
+        r"less\s+than\s*\$?\s*(\d+(?:\.\d+)?)",
+        r"below\s*\$?\s*(\d+(?:\.\d+)?)",
+        r"cheaper\s+than\s*\$?\s*(\d+(?:\.\d+)?)",
+        r"within\s*\$?\s*(\d+(?:\.\d+)?)",
+        r"budget\s+of\s*\$?\s*(\d+(?:\.\d+)?)",
+        r"\$\s*(\d+(?:\.\d+)?)",
+    ]
     text = normalize(message)
-    for intent, keywords in INTENT_MAP.items():
-        if contains_any(text, keywords):
-            return intent
-    return "general_lookup"
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return float(match.group(1))
+    return None
 
 
-# ============================================================
+# ----------------------------
 # Menu queries
-# ============================================================
+# ----------------------------
 
-def find_matching_menu_items(message: str):
+def find_matching_menu_items(message: str, available_only: bool = False):
     keywords = extract_keywords(message)
     if not keywords:
         return MenuItem.objects.none()
@@ -163,127 +88,165 @@ def find_matching_menu_items(message: str):
         query |= Q(description__icontains=word)
         query |= Q(ingredients__icontains=word)
         query |= Q(category__name__icontains=word)
-        query |= Q(tags__name__icontains=word)       # dietary tags
+        query |= Q(tags__icontains=word)  # if you have a tags field
 
-    return (
-        MenuItem.objects.select_related("category")
-        .prefetch_related("tags")
-        .filter(query)
-        .distinct()
-    )
+    qs = MenuItem.objects.select_related("category").filter(query).distinct()
+    if available_only:
+        qs = qs.filter(availability=True)
+    return qs
 
 
 def get_available_menu_items(limit: int = 20) -> List[Dict]:
     items = (
         MenuItem.objects.select_related("category")
-        .prefetch_related("tags")
         .filter(availability=True)
         .order_by("category__name", "name")[:limit]
     )
-    return [_serialize_item(item) for item in items]
+    return [_format_menu_item(item) for item in items]
 
 
-def get_menu_item_details(message: str) -> List[Dict]:
-    items = find_matching_menu_items(message)[:10]
-    return [_serialize_item(item, include_availability=True) for item in items]
+def get_full_menu() -> Dict[str, List[Dict]]:
+    """Return the full menu grouped by category."""
+    items = (
+        MenuItem.objects.select_related("category")
+        .filter(availability=True)
+        .order_by("category__name", "name")
+    )
+    menu: Dict[str, List] = {}
+    for item in items:
+        cat = item.category.name
+        menu.setdefault(cat, [])
+        menu[cat].append(_format_menu_item(item))
+    return menu
 
 
-def get_menu_categories() -> List[str]:
-    return list(MenuCategory.objects.order_by("name").values_list("name", flat=True))
+def get_menu_item_details(message: str, available_only: bool = False) -> List[Dict]:
+    items = find_matching_menu_items(message, available_only=available_only)[:10]
+    return [_format_menu_item_full(item) for item in items]
 
 
-def _serialize_item(item, include_availability: bool = False) -> Dict:
-    data = {
+def get_menu_categories() -> List[Dict]:
+    cats = MenuCategory.objects.order_by("name")
+    result = []
+    for cat in cats:
+        count = MenuItem.objects.filter(category=cat, availability=True).count()
+        result.append({"name": cat.name, "available_items": count})
+    return result
+
+
+def get_items_by_category(message: str) -> List[Dict]:
+    categories = MenuCategory.objects.all()
+    text = normalize(message)
+    matched_cat = None
+    for cat in categories:
+        if normalize(cat.name) in text or text in normalize(cat.name):
+            matched_cat = cat
+            break
+
+    if not matched_cat:
+        # Try keyword match on category name
+        keywords = extract_keywords(message)
+        for keyword in keywords:
+            try:
+                matched_cat = categories.filter(name__icontains=keyword).first()
+                if matched_cat:
+                    break
+            except Exception:
+                pass
+
+    if matched_cat:
+        items = (
+            MenuItem.objects.select_related("category")
+            .filter(category=matched_cat, availability=True)
+            .order_by("name")
+        )
+        return [_format_menu_item_full(item) for item in items]
+    return []
+
+
+def get_items_by_budget(max_price: float) -> List[Dict]:
+    items = (
+        MenuItem.objects.select_related("category")
+        .filter(availability=True, price__lte=max_price)
+        .order_by("price")[:15]
+    )
+    return [_format_menu_item(item) for item in items]
+
+
+def get_price_range() -> Dict:
+    result = MenuItem.objects.filter(availability=True).aggregate(
+        min_price=Min("price"),
+        max_price=Max("price"),
+        avg_price=Avg("price"),
+    )
+    return {
+        "min_price": money(result["min_price"]),
+        "max_price": money(result["max_price"]),
+        "avg_price": money(result["avg_price"]),
+    }
+
+
+def get_dietary_items(dietary_type: str) -> List[Dict]:
+    """
+    Filter by dietary preference based on name/description/ingredients/tags.
+    dietary_type: 'vegetarian', 'vegan', 'gluten_free', 'dairy_free',
+                  'spicy', 'non_spicy', 'halal', 'low_calorie', etc.
+    """
+    DIETARY_KEYWORDS = {
+        "vegetarian": ["vegetarian", "veggie", "no meat", "plant"],
+        "vegan": ["vegan", "plant-based", "no dairy", "no eggs"],
+        "gluten_free": ["gluten-free", "gluten free", "no gluten", "gf"],
+        "dairy_free": ["dairy-free", "dairy free", "no dairy", "lactose"],
+        "spicy": ["spicy", "hot", "chili", "jalapeño", "sriracha", "pepper"],
+        "non_spicy": ["mild", "non-spicy", "not spicy", "no spice"],
+        "halal": ["halal"],
+        "low_calorie": ["light", "low calorie", "healthy", "diet", "salad", "grilled"],
+        "seafood": ["fish", "seafood", "prawn", "shrimp", "crab", "lobster", "salmon"],
+        "chicken": ["chicken", "poultry"],
+        "beef": ["beef", "steak", "burger"],
+        "lamb": ["lamb", "mutton"],
+        "dessert": ["dessert", "sweet", "cake", "ice cream", "pudding"],
+    }
+
+    keywords = DIETARY_KEYWORDS.get(dietary_type, [dietary_type.replace("_", " ")])
+    query = Q()
+    for kw in keywords:
+        query |= Q(name__icontains=kw)
+        query |= Q(description__icontains=kw)
+        query |= Q(ingredients__icontains=kw)
+        # query |= Q(tags__icontains=kw)  # uncomment if tags field exists
+
+    items = (
+        MenuItem.objects.select_related("category")
+        .filter(query, availability=True)
+        .distinct()[:15]
+    )
+    return [_format_menu_item_full(item) for item in items]
+
+
+def _format_menu_item(item) -> Dict:
+    return {
         "name": item.name,
         "category": item.category.name,
         "price": money(item.price),
         "description": item.description or "N/A",
+    }
+
+
+def _format_menu_item_full(item) -> Dict:
+    return {
+        "name": item.name,
+        "category": item.category.name,
+        "price": money(item.price),
+        "available": item.availability,
         "ingredients": item.ingredients or "N/A",
-        "tags": [t.name for t in item.tags.all()] if hasattr(item, "tags") else [],
-    }
-    if hasattr(item, "calories") and item.calories:
-        data["calories"] = item.calories
-    if hasattr(item, "spice_level") and item.spice_level:
-        data["spice_level"] = item.spice_level
-    if include_availability:
-        data["available"] = item.availability
-    return data
-
-
-# ============================================================
-# Dietary filtering
-# ============================================================
-
-def get_items_by_dietary_preference(message: str) -> List[Dict]:
-    """
-    Filter menu items by dietary tag or ingredient exclusion
-    derived from the user message.
-    """
-    dietary_map = {
-        "vegan":       ["vegan"],
-        "vegetarian":  ["vegetarian", "veg"],
-        "gluten":      ["gluten-free", "gluten free"],
-        "halal":       ["halal"],
-        "kosher":      ["kosher"],
-        "dairy":       ["dairy-free", "no dairy", "lactose-free"],
-        "nut":         ["nut-free", "no nuts"],
-        "sugar":       ["sugar-free"],
-        "keto":        ["keto", "low-carb"],
-        "paleo":       ["paleo"],
-        "spicy":       ["spicy", "hot"],
-        "healthy":     ["healthy", "low calorie", "light"],
+        "description": item.description or "N/A",
     }
 
-    text = normalize(message)
-    filters = Q(availability=True)
-    matched = False
 
-    for keyword, tags in dietary_map.items():
-        if keyword in text:
-            matched = True
-            tag_q = Q()
-            for tag in tags:
-                tag_q |= Q(tags__name__icontains=tag)
-                tag_q |= Q(description__icontains=tag)
-                tag_q |= Q(ingredients__icontains=tag)
-            filters &= tag_q
-
-    if not matched:
-        return []
-
-    items = (
-        MenuItem.objects.select_related("category")
-        .prefetch_related("tags")
-        .filter(filters)
-        .distinct()[:15]
-    )
-    return [_serialize_item(item) for item in items]
-
-
-# ============================================================
-# Nutrition
-# ============================================================
-
-def get_nutrition_info(message: str) -> List[Dict]:
-    items = find_matching_menu_items(message)[:5]
-    result = []
-    for item in items:
-        entry = {
-            "name": item.name,
-            "price": money(item.price),
-            "ingredients": item.ingredients or "N/A",
-        }
-        for field in ["calories", "protein_g", "carbs_g", "fat_g", "sodium_mg", "fiber_g"]:
-            val = getattr(item, field, None)
-            if val is not None:
-                entry[field] = val
-        result.append(entry)
-    return result
-
-
-# ============================================================
-# Analytics
-# ============================================================
+# ----------------------------
+# Analytics / recommendations
+# ----------------------------
 
 def get_most_ordered_dishes(limit: int = 5) -> List[Dict]:
     rows = (
@@ -316,7 +279,7 @@ def get_top_rated_dishes(limit: int = 5, min_reviews: int = 1) -> List[Dict]:
         .filter(orderitem__order__feedback__isnull=False)
         .annotate(
             avg_rating=Avg("orderitem__order__feedback__rating"),
-            review_count=Count("orderitem__order__feedback"),
+            review_count=Count("orderitem__order__feedback", distinct=True),
         )
         .filter(review_count__gte=min_reviews)
         .order_by("-avg_rating", "-review_count", "name")[:limit]
@@ -327,18 +290,98 @@ def get_top_rated_dishes(limit: int = 5, min_reviews: int = 1) -> List[Dict]:
             "avg_rating": round(item.avg_rating or 0, 2),
             "review_count": item.review_count or 0,
             "price": money(item.price),
+            "category": item.category.name,
+            "description": item.description or "",
         }
         for item in rows
     ]
 
 
+def get_chef_recommendations() -> List[Dict]:
+    """Best combo: highly rated + frequently ordered."""
+    top_rated_ids = set(
+        MenuItem.objects
+        .filter(orderitem__order__feedback__isnull=False)
+        .annotate(avg_rating=Avg("orderitem__order__feedback__rating"))
+        .filter(avg_rating__gte=4.0)
+        .values_list("id", flat=True)
+    )
+    top_ordered_ids = set(
+        OrderItem.objects
+        .values("menu_item__id")
+        .annotate(cnt=Count("id"))
+        .order_by("-cnt")[:20]
+        .values_list("menu_item__id", flat=True)
+    )
+    chef_picks_ids = top_rated_ids & top_ordered_ids
+
+    items = (
+        MenuItem.objects.select_related("category")
+        .filter(id__in=chef_picks_ids, availability=True)[:6]
+    )
+    if not items:
+        # Fall back to top rated
+        return get_top_rated_dishes(limit=5)
+    return [_format_menu_item_full(item) for item in items]
+
+
+def get_new_or_featured_items() -> List[Dict]:
+    """Most recently added items (assumes created_at field on MenuItem)."""
+    try:
+        items = (
+            MenuItem.objects.select_related("category")
+            .filter(availability=True)
+            .order_by("-created_at")[:5]
+        )
+        return [_format_menu_item_full(item) for item in items]
+    except Exception:
+        return get_available_menu_items(limit=5)
+
+
+def get_similar_items(message: str) -> List[Dict]:
+    """Find items similar to what user described."""
+    matched = find_matching_menu_items(message, available_only=True)[:5]
+    if matched:
+        categories = list(set(item.category_id for item in matched))
+        related = (
+            MenuItem.objects.select_related("category")
+            .filter(category_id__in=categories, availability=True)
+            .exclude(id__in=[item.id for item in matched])
+            .order_by("?")[:5]  # random similar
+        )
+        return [_format_menu_item_full(item) for item in matched] + \
+               [_format_menu_item(item) for item in related]
+    return get_available_menu_items(limit=10)
+
+
+def get_combo_suggestions() -> List[Dict]:
+    """Suggest starter + main + dessert combos based on popular items."""
+    combos = []
+    for cat_keyword in [["starter", "appetizer", "soup"], ["main", "entrée", "rice", "pasta"], ["dessert", "sweet"]]:
+        query = Q()
+        for kw in cat_keyword:
+            query |= Q(category__name__icontains=kw)
+        item = (
+            MenuItem.objects.select_related("category")
+            .filter(query, availability=True)
+            .order_by("?")
+            .first()
+        )
+        if item:
+            combos.append(_format_menu_item(item))
+    return combos
+
+
+# ----------------------------
+# Order & feedback queries
+# ----------------------------
+
 def get_order_stats() -> Dict:
-    total_orders    = Order.objects.count()
-    completed       = Order.objects.filter(status="completed").count()
-    pending         = Order.objects.filter(status="pending").count()
-    preparing       = Order.objects.filter(status="preparing").count()
-    served          = Order.objects.filter(status="served").count()
-    cancelled       = Order.objects.filter(status="cancelled").count()
+    total_orders = Order.objects.count()
+    completed_orders = Order.objects.filter(status="completed").count()
+    pending_orders = Order.objects.filter(status="pending").count()
+    preparing_orders = Order.objects.filter(status="preparing").count()
+    served_orders = Order.objects.filter(status="served").count()
 
     total_sales = (
         Order.objects.filter(status="completed")
@@ -348,20 +391,15 @@ def get_order_stats() -> Dict:
     avg_feedback = Feedback.objects.aggregate(avg=Avg("rating")).get("avg")
 
     return {
-        "total_orders":             total_orders,
-        "completed_orders":         completed,
-        "pending_orders":           pending,
-        "preparing_orders":         preparing,
-        "served_orders":            served,
-        "cancelled_orders":         cancelled,
-        "total_sales":              money(total_sales),
-        "average_feedback_rating":  round(avg_feedback, 2) if avg_feedback else None,
+        "total_orders": total_orders,
+        "completed_orders": completed_orders,
+        "pending_orders": pending_orders,
+        "preparing_orders": preparing_orders,
+        "served_orders": served_orders,
+        "total_sales": money(total_sales),
+        "average_feedback_rating": round(avg_feedback, 2) if avg_feedback is not None else None,
     }
 
-
-# ============================================================
-# Customer-specific queries
-# ============================================================
 
 def get_user_recent_orders(user, limit: int = 5) -> List[Dict]:
     if not user or not user.is_authenticated:
@@ -373,7 +411,6 @@ def get_user_recent_orders(user, limit: int = 5) -> List[Dict]:
         .filter(user=user)
         .order_by("-created_at")[:limit]
     )
-
     data = []
     for order in orders:
         items = [
@@ -385,428 +422,522 @@ def get_user_recent_orders(user, limit: int = 5) -> List[Dict]:
             for item in order.items.all()
         ]
         data.append({
-            "order_id":      order.id,
-            "status":        order.status,
-            "total_amount":  money(order.total_amount),
-            "table_id":      order.table.id if order.table else None,
+            "order_id": order.id,
+            "status": order.status,
+            "total_amount": money(order.total_amount),
+            "table_id": order.table.id if order.table else None,
             "special_notes": order.special_notes or "",
-            "created_at":    str(order.created_at),
-            "items":         items,
+            "created_at": str(order.created_at),
+            "items": items,
         })
     return data
 
 
-def get_order_by_id(order_id: int, user) -> Dict:
-    """Live order tracking by ID."""
-    try:
-        order = (
-            Order.objects.select_related("table")
-            .prefetch_related("items__menu_item")
-            .get(id=order_id, user=user)
-        )
-        STATUS_NEXT = {
-            "pending":    "Your order has been received and is waiting to be confirmed.",
-            "preparing":  "Our kitchen is preparing your order right now.",
-            "served":     "Your order has been served. Enjoy your meal!",
-            "completed":  "Your order is complete. Thank you for dining with us!",
-            "cancelled":  "This order has been cancelled. Please contact staff if this is unexpected.",
-        }
-        return {
-            "order_id":      order.id,
-            "status":        order.status,
-            "status_message": STATUS_NEXT.get(order.status, "Status unknown."),
-            "placed_at":     str(order.created_at),
-            "estimated_ready": str(getattr(order, "estimated_ready_at", "N/A")),
-            "table":         order.table.id if order.table else "N/A",
-            "items": [
-                {"name": i.menu_item.name, "qty": i.quantity}
-                for i in order.items.all()
-            ],
-            "total": money(order.total_amount),
-        }
-    except Order.DoesNotExist:
-        return {"error": "Order not found. Please check the order number."}
-
-
-def get_user_feedback_history(user) -> List[Dict]:
+def get_user_favorite_items(user, limit: int = 5) -> List[Dict]:
+    """Items this user has ordered most frequently."""
     if not user or not user.is_authenticated:
         return []
-    return list(
-        Feedback.objects.filter(order__user=user)
-        .order_by("-created_at")[:5]
-        .values("rating", "comment", "created_at")
-    )
-
-
-# ============================================================
-# Personalized recommendations
-# ============================================================
-
-def get_personalized_recommendations(user, limit: int = 5) -> List[Dict]:
-    """
-    Suggest popular dishes the user hasn't tried yet.
-    Falls back to overall most-ordered if user is not authenticated.
-    """
-    if not user or not user.is_authenticated:
-        return get_most_ordered_dishes(limit)
-
-    already_tried = (
-        OrderItem.objects.filter(order__user=user)
-        .values_list("menu_item_id", flat=True)
-        .distinct()
-    )
 
     rows = (
         OrderItem.objects
-        .exclude(menu_item_id__in=already_tried)
-        .filter(menu_item__availability=True)
+        .filter(order__user=user)
         .values("menu_item__id", "menu_item__name")
-        .annotate(order_count=Count("id"))
-        .order_by("-order_count")[:limit]
+        .annotate(times_ordered=Count("id"))
+        .order_by("-times_ordered")[:limit]
     )
+    result = []
+    for row in rows:
+        try:
+            item = MenuItem.objects.select_related("category").get(id=row["menu_item__id"])
+            result.append({
+                **_format_menu_item(item),
+                "times_ordered": row["times_ordered"],
+            })
+        except MenuItem.DoesNotExist:
+            pass
+    return result
 
-    if not rows:
-        return get_most_ordered_dishes(limit)
 
-    ids = [r["menu_item__id"] for r in rows]
-    items = MenuItem.objects.filter(id__in=ids).select_related("category")
-    item_map = {i.id: i for i in items}
+def get_user_feedback_history(user, limit: int = 5) -> List[Dict]:
+    if not user or not user.is_authenticated:
+        return []
 
+    feedbacks = (
+        Feedback.objects
+        .select_related("order")
+        .filter(order__user=user)
+        .order_by("-created_at")[:limit]
+    )
     return [
         {
-            "name": item_map[r["menu_item__id"]].name,
-            "category": item_map[r["menu_item__id"]].category.name,
-            "price": money(item_map[r["menu_item__id"]].price),
-            "times_ordered": r["order_count"],
-            "reason": "Popular with other customers and you haven't tried it yet!",
+            "order_id": fb.order.id,
+            "rating": fb.rating,
+            "comment": fb.comment or "",
+            "created_at": str(fb.created_at),
         }
-        for r in rows
-        if r["menu_item__id"] in item_map
+        for fb in feedbacks
     ]
 
 
-# ============================================================
-# Specials & promotions
-# ============================================================
-
-def get_todays_specials() -> List[Dict]:
-    from django.utils import timezone
-
-    today = timezone.now().weekday()   # 0 = Monday … 6 = Sunday
-
-    # Requires a `special_day` IntegerField (0–6) or similar on MenuItem
-    qs = MenuItem.objects.filter(availability=True)
-    if hasattr(MenuItem, "special_day"):
-        qs = qs.filter(special_day=today)
-    elif hasattr(MenuItem, "is_daily_special"):
-        qs = qs.filter(is_daily_special=True)
-    else:
-        return []   # model doesn't support specials yet
-
-    return list(qs.select_related("category").values(
-        "name", "price", "description", "category__name"
-    )[:10])
-
-
-def get_active_promotions() -> List[Dict]:
-    from django.utils import timezone
-
-    try:
-        from promotions.models import Promotion
-    except ImportError:
-        return []   # promotions app not installed
-
-    now = timezone.now()
-    promos = Promotion.objects.filter(
-        start_date__lte=now,
-        end_date__gte=now,
-        is_active=True,
-    ).values("title", "description", "discount_percent", "applies_to", "end_date")
-
+def get_recent_feedbacks(limit: int = 5) -> List[Dict]:
+    feedbacks = (
+        Feedback.objects
+        .select_related("order")
+        .order_by("-created_at")[:limit]
+    )
     return [
-        {**p, "end_date": str(p["end_date"])}
-        for p in promos
+        {
+            "rating": fb.rating,
+            "comment": fb.comment or "",
+            "created_at": str(fb.created_at),
+        }
+        for fb in feedbacks
     ]
 
 
-# ============================================================
-# Table availability
-# ============================================================
+# ----------------------------
+# Intent detection
+# ----------------------------
 
-def get_table_availability() -> Dict:
-    try:
-        from tables.models import Table
-    except ImportError:
-        return {"error": "Table management module not available."}
+# Each intent maps to a list of trigger phrases.
+INTENT_PATTERNS = {
+    "popular_dishes": [
+        "most ordered", "popular dish", "popular dishes", "best selling",
+        "top selling", "most popular", "trending", "people love", "everyone orders",
+        "what do people order", "crowd favorite", "crowd favourite",
+    ],
+    "top_rated_dishes": [
+        "top rated", "best rated", "highest rated", "best dish", "best dishes",
+        "most loved", "highest rating", "best reviews", "best reviewed",
+    ],
+    "chef_recommendation": [
+        "recommend", "recommendation", "suggestions", "suggest", "what should i order",
+        "what do you suggest", "chef", "house special", "speciality", "specialty",
+        "what's good", "whats good", "what is good", "what's best", "whats best",
+        "must try", "must-try", "must have", "must-have", "best pick", "top pick",
+        "what to order", "help me choose", "help me decide", "what would you recommend",
+        "surprise me", "your pick", "your choice", "staff pick",
+    ],
+    "new_items": [
+        "new dish", "new dishes", "new item", "new items", "new on menu", "new arrival",
+        "latest dish", "recently added", "what's new", "whats new", "featured",
+    ],
+    "combo_suggestion": [
+        "combo", "set meal", "meal deal", "starter and main", "full meal",
+        "what goes with", "pair with", "combination", "package",
+    ],
+    "dietary_vegetarian": [
+        "vegetarian", "veggie", "no meat", "meatless", "plant based", "plant-based",
+    ],
+    "dietary_vegan": [
+        "vegan", "no animal", "plant only", "no dairy no eggs",
+    ],
+    "dietary_gluten_free": [
+        "gluten free", "gluten-free", "no gluten", "celiac", "coeliac",
+    ],
+    "dietary_spicy": [
+        "spicy", "hot dish", "spicy food", "spicy option", "spicy menu",
+        "something spicy", "hot and spicy",
+    ],
+    "dietary_non_spicy": [
+        "not spicy", "non spicy", "mild", "no spice", "bland", "without spice",
+    ],
+    "dietary_halal": [
+        "halal", "halal food", "halal option",
+    ],
+    "dietary_seafood": [
+        "seafood", "fish", "prawn", "shrimp", "crab", "lobster",
+    ],
+    "dietary_chicken": [
+        "chicken", "poultry", "grilled chicken", "fried chicken",
+    ],
+    "dietary_beef": [
+        "beef", "steak", "burger", "beef dish",
+    ],
+    "dietary_dessert": [
+        "dessert", "sweet", "something sweet", "pudding", "cake", "ice cream",
+    ],
+    "budget_search": [
+        "under", "less than", "below", "cheap", "cheapest", "affordable",
+        "budget", "inexpensive", "low price", "low cost", "economy",
+    ],
+    "price_range": [
+        "price range", "how expensive", "how cheap", "minimum price", "maximum price",
+        "cheapest dish", "most expensive", "price list", "pricing",
+    ],
+    "dish_contents": [
+        "ingredient", "ingredients", "what is in", "contains", "content of",
+        "what's inside", "whats inside", "made of", "made with", "what does it contain",
+        "allergen", "allergy",
+    ],
+    "dish_price": [
+        "price", "cost", "how much", "how much is", "how much does",
+    ],
+    "menu_lookup": [
+        "show menu", "full menu", "see menu", "view menu", "entire menu",
+        "whole menu", "complete menu", "all items", "all dishes", "what do you serve",
+        "what do you have", "what's available", "whats available", "do you have",
+        "is there", "menu please", "your menu",
+    ],
+    "categories": [
+        "category", "categories", "type of food", "types of food",
+        "sections", "section", "food type",
+    ],
+    "category_items": [
+        # this is handled via contains_any for any category name dynamically
+    ],
+    "user_orders": [
+        "my order", "my orders", "order status", "recent orders", "my recent order",
+        "what did i order", "past order", "order history", "my history",
+        "track my order", "where is my order",
+    ],
+    "user_favorites": [
+        "my favorite", "my favourite", "what i usually order", "what i always order",
+        "my go to", "my go-to", "i usually have", "i always have",
+    ],
+    "user_feedback": [
+        "my feedback", "my review", "my rating", "my ratings", "my reviews",
+    ],
+    "order_stats": [
+        "sales", "total orders", "order stats", "statistics", "analytics",
+        "how many orders", "revenue", "total sales",
+    ],
+    "restaurant_info": [
+        "about", "hours", "opening hours", "open", "close", "closing",
+        "location", "address", "where are you", "contact", "phone",
+        "reservation", "book a table", "booking", "table for", "wifi",
+        "parking", "dress code", "pets allowed", "outdoor seating",
+    ],
+    "greeting": [
+        "hello", "hi", "hey", "good morning", "good afternoon", "good evening",
+        "howdy", "greetings", "sup", "what's up",
+    ],
+    "thanks": [
+        "thank", "thanks", "thank you", "cheers", "great", "awesome",
+        "perfect", "wonderful", "brilliant",
+    ],
+    "help": [
+        "help", "what can you do", "what can you help", "how do you work",
+        "what are your features", "capabilities", "options",
+    ],
+    "feedback_general": [
+        "reviews", "feedback", "ratings", "what do people think",
+        "customer review", "customer feedback",
+    ],
+}
 
-    tables = Table.objects.all()
-    return {
-        "total_tables":     tables.count(),
-        "available":        tables.filter(status="available").count(),
-        "occupied":         tables.filter(status="occupied").count(),
-        "reserved":         tables.filter(status="reserved").count(),
-        "available_sizes":  list(
-            tables.filter(status="available")
-            .values_list("capacity", flat=True)
-            .order_by("capacity")
-        ),
-    }
+
+def detect_intent(message: str) -> str:
+    text = normalize(message)
+
+    for intent, phrases in INTENT_PATTERNS.items():
+        if phrases and contains_any(text, phrases):
+            return intent
+
+    # Dynamic category match
+    categories = MenuCategory.objects.values_list("name", flat=True)
+    for cat in categories:
+        if normalize(cat) in text:
+            return "category_items"
+
+    return "general_lookup"
 
 
-# ============================================================
-# Restaurant info  (configure in settings.py)
-# ============================================================
-
-def get_restaurant_info() -> Dict:
-    return {
-        "name":                  getattr(settings, "RESTAURANT_NAME",    "Our Restaurant"),
-        "address":               getattr(settings, "RESTAURANT_ADDRESS", "N/A"),
-        "phone":                 getattr(settings, "RESTAURANT_PHONE",   "N/A"),
-        "email":                 getattr(settings, "RESTAURANT_EMAIL",   "N/A"),
-        "opening_hours":         getattr(settings, "RESTAURANT_HOURS",   {}),
-        "cuisine_type":          getattr(settings, "RESTAURANT_CUISINE", "N/A"),
-        "wifi_available":        getattr(settings, "RESTAURANT_WIFI",    False),
-        "parking_available":     getattr(settings, "RESTAURANT_PARKING", False),
-        "accepts_reservations":  getattr(settings, "RESTAURANT_RESERVATIONS", True),
-        "delivery_available":    getattr(settings, "RESTAURANT_DELIVERY", False),
-        "takeaway_available":    getattr(settings, "RESTAURANT_TAKEAWAY", False),
-    }
-
-
-# ============================================================
-# Payment info
-# ============================================================
-
-def get_payment_info() -> Dict:
-    return {
-        "accepted_methods":   getattr(settings, "PAYMENT_METHODS",      ["Cash", "Credit Card", "Debit Card"]),
-        "online_payment":     getattr(settings, "PAYMENT_ONLINE",       False),
-        "split_bill":         getattr(settings, "PAYMENT_SPLIT_BILL",   True),
-        "service_charge":     getattr(settings, "PAYMENT_SERVICE_CHARGE", "10%"),
-        "tip_guidance":       getattr(settings, "PAYMENT_TIP_GUIDANCE", "Tips are appreciated but not mandatory."),
-    }
-
-
-# ============================================================
-# Delivery info
-# ============================================================
-
-def get_delivery_info() -> Dict:
-    return {
-        "delivery_available":   getattr(settings, "RESTAURANT_DELIVERY",      False),
-        "delivery_radius_km":   getattr(settings, "DELIVERY_RADIUS_KM",       5),
-        "delivery_fee":         getattr(settings, "DELIVERY_FEE",             "2.99"),
-        "min_order_amount":     getattr(settings, "DELIVERY_MIN_ORDER",       "15.00"),
-        "estimated_time_mins":  getattr(settings, "DELIVERY_ESTIMATED_MINS",  45),
-        "platforms":            getattr(settings, "DELIVERY_PLATFORMS",       []),
-    }
-
-
-# ============================================================
-# Catering info
-# ============================================================
-
-def get_catering_info() -> Dict:
-    return {
-        "catering_available": getattr(settings, "CATERING_AVAILABLE", False),
-        "min_guests":         getattr(settings, "CATERING_MIN_GUESTS", 20),
-        "advance_notice_days":getattr(settings, "CATERING_NOTICE_DAYS", 3),
-        "contact":            getattr(settings, "CATERING_CONTACT",    getattr(settings, "RESTAURANT_EMAIL", "N/A")),
-        "packages":           getattr(settings, "CATERING_PACKAGES",   []),
-    }
-
-
-# ============================================================
-# Extract order ID from message
-# ============================================================
-
-def extract_order_id(message: str) -> Optional[int]:
-    import re
-    match = re.search(r"\b(?:order[#\s]*)?(\d{1,6})\b", normalize(message))
-    if match:
-        try:
-            return int(match.group(1))
-        except ValueError:
-            return None
-    return None
-
-
-# ============================================================
+# ----------------------------
 # Structured context builder
-# ============================================================
+# ----------------------------
 
 def build_structured_context(user, message: str) -> Dict:
     intent = detect_intent(message)
 
-    # --- popular dishes ---
+    # --- Social / meta intents ---
+    if intent == "greeting":
+        return {
+            "intent": intent,
+            "data": {
+                "message": "The user is greeting. Respond warmly and offer to help with the menu, recommendations, or their order.",
+                "available_menu_items": get_available_menu_items(limit=5),
+            }
+        }
+
+    if intent == "thanks":
+        return {
+            "intent": intent,
+            "data": {
+                "message": "The user is expressing thanks. Respond warmly.",
+            }
+        }
+
+    if intent == "help":
+        return {
+            "intent": intent,
+            "data": {
+                "message": (
+                    "Explain what you can help with: showing the full menu, "
+                    "recommendations, popular/top-rated dishes, dietary options "
+                    "(vegetarian, vegan, gluten-free, spicy, etc.), price info, "
+                    "budget-based suggestions, order history, and general restaurant questions."
+                ),
+                "categories": get_menu_categories(),
+            }
+        }
+
+    # --- Restaurant info ---
+    if intent == "restaurant_info":
+        return {
+            "intent": intent,
+            "data": {
+                "message": (
+                    "Answer based on any restaurant info you have. If the user asks "
+                    "about hours, location, reservations, or policies and you don't "
+                    "have that data, politely say you don't have that info and suggest "
+                    "they contact the restaurant directly."
+                ),
+            }
+        }
+
+    # --- Popular / ratings ---
     if intent == "popular_dishes":
-        return {"intent": intent, "data": {
-            "most_ordered_dishes": get_most_ordered_dishes(),
-        }}
+        return {
+            "intent": intent,
+            "data": {
+                "most_ordered_dishes": get_most_ordered_dishes(),
+            }
+        }
 
-    # --- top rated ---
     if intent == "top_rated_dishes":
-        return {"intent": intent, "data": {
-            "top_rated_dishes": get_top_rated_dishes(),
-        }}
+        return {
+            "intent": intent,
+            "data": {
+                "top_rated_dishes": get_top_rated_dishes(),
+            }
+        }
 
-    # --- dietary ---
-    if intent == "dietary":
-        items = get_items_by_dietary_preference(message)
-        if items:
-            return {"intent": intent, "data": {"dietary_items": items}}
-        return {"intent": intent, "data": {
-            "message": "No specific dietary items found. Showing full menu.",
-            "available_menu_items": get_available_menu_items(),
-        }}
+    if intent == "chef_recommendation":
+        return {
+            "intent": intent,
+            "data": {
+                "chef_recommendations": get_chef_recommendations(),
+                "most_ordered_dishes": get_most_ordered_dishes(limit=3),
+                "top_rated_dishes": get_top_rated_dishes(limit=3),
+            }
+        }
 
-    # --- nutrition ---
-    if intent == "nutrition":
-        nutrition = get_nutrition_info(message)
-        if nutrition:
-            return {"intent": intent, "data": {"nutrition_info": nutrition}}
-        return {"intent": intent, "data": {
-            "message": "Nutritional information not available for those items.",
-        }}
+    if intent == "new_items":
+        return {
+            "intent": intent,
+            "data": {
+                "new_or_featured_items": get_new_or_featured_items(),
+            }
+        }
 
-    # --- dish contents / price / menu lookup / general ---
-    if intent in {"dish_contents", "dish_price", "menu_lookup", "general_lookup"}:
+    if intent == "combo_suggestion":
+        return {
+            "intent": intent,
+            "data": {
+                "combo_suggestions": get_combo_suggestions(),
+                "popular_dishes": get_most_ordered_dishes(limit=3),
+            }
+        }
+
+    # --- Dietary filters ---
+    dietary_map = {
+        "dietary_vegetarian": "vegetarian",
+        "dietary_vegan": "vegan",
+        "dietary_gluten_free": "gluten_free",
+        "dietary_spicy": "spicy",
+        "dietary_non_spicy": "non_spicy",
+        "dietary_halal": "halal",
+        "dietary_seafood": "seafood",
+        "dietary_chicken": "chicken",
+        "dietary_beef": "beef",
+        "dietary_dessert": "dessert",
+    }
+    if intent in dietary_map:
+        dietary_type = dietary_map[intent]
+        items = get_dietary_items(dietary_type)
+        return {
+            "intent": intent,
+            "data": {
+                "dietary_type": dietary_type,
+                "matched_items": items if items else [],
+                "note": "No items found for this dietary preference." if not items else "",
+            }
+        }
+
+    # --- Budget ---
+    if intent == "budget_search":
+        budget = parse_budget(message)
+        if budget:
+            items = get_items_by_budget(budget)
+            return {
+                "intent": intent,
+                "data": {
+                    "budget": budget,
+                    "items_within_budget": items,
+                }
+            }
+        # No budget number found — fall through to price_range
+        intent = "price_range"
+
+    if intent == "price_range":
+        return {
+            "intent": intent,
+            "data": {
+                "price_range": get_price_range(),
+                "cheapest_items": get_items_by_budget(999999)[:5],  # sorted by price asc
+            }
+        }
+
+    # --- Dish info ---
+    if intent in {"dish_contents", "dish_price"}:
         matched = get_menu_item_details(message)
         if matched:
             return {"intent": intent, "data": {"matched_menu_items": matched}}
-        return {"intent": intent, "data": {
-            "available_menu_items": get_available_menu_items(),
-        }}
+        return {
+            "intent": intent,
+            "data": {
+                "matched_menu_items": [],
+                "available_menu_items": get_available_menu_items(limit=10),
+            }
+        }
 
-    # --- categories ---
+    # --- Full menu / availability ---
+    if intent == "menu_lookup":
+        return {
+            "intent": intent,
+            "data": {
+                "full_menu_by_category": get_full_menu(),
+            }
+        }
+
     if intent == "categories":
-        return {"intent": intent, "data": {
-            "categories": get_menu_categories(),
-        }}
+        return {
+            "intent": intent,
+            "data": {
+                "categories": get_menu_categories(),
+            }
+        }
 
-    # --- user order history ---
+    if intent == "category_items":
+        items = get_items_by_category(message)
+        return {
+            "intent": intent,
+            "data": {
+                "category_items": items if items else [],
+                "note": "Could not identify a specific category. Showing available menu." if not items else "",
+                "available_menu_items": get_available_menu_items(limit=5) if not items else [],
+            }
+        }
+
+    # --- User-specific ---
     if intent == "user_orders":
-        return {"intent": intent, "data": {
-            "user_recent_orders": get_user_recent_orders(user),
-        }}
+        return {
+            "intent": intent,
+            "data": {
+                "user_recent_orders": get_user_recent_orders(user),
+            }
+        }
 
-    # --- order tracking by ID ---
-    if intent == "order_tracking":
-        order_id = extract_order_id(message)
-        if order_id:
-            return {"intent": intent, "data": {
-                "order_details": get_order_by_id(order_id, user),
-            }}
-        # No ID found — show recent orders
-        return {"intent": intent, "data": {
-            "message": "No order number detected. Showing your recent orders.",
-            "user_recent_orders": get_user_recent_orders(user),
-        }}
+    if intent == "user_favorites":
+        return {
+            "intent": intent,
+            "data": {
+                "user_favorite_items": get_user_favorite_items(user),
+                "note": "Based on the user's order history.",
+            }
+        }
 
-    # --- order analytics ---
+    if intent == "user_feedback":
+        return {
+            "intent": intent,
+            "data": {
+                "user_feedback_history": get_user_feedback_history(user),
+            }
+        }
+
+    # --- Stats / analytics ---
     if intent == "order_stats":
-        return {"intent": intent, "data": {
-            "order_stats":         get_order_stats(),
-            "most_ordered_dishes": get_most_ordered_dishes(),
-            "top_rated_dishes":    get_top_rated_dishes(),
-        }}
+        return {
+            "intent": intent,
+            "data": {
+                "order_stats": get_order_stats(),
+                "most_ordered_dishes": get_most_ordered_dishes(),
+                "top_rated_dishes": get_top_rated_dishes(),
+            }
+        }
 
-    # --- specials & promotions ---
-    if intent == "specials":
-        return {"intent": intent, "data": {
-            "todays_specials":   get_todays_specials(),
-            "active_promotions": get_active_promotions(),
-        }}
+    if intent == "feedback_general":
+        return {
+            "intent": intent,
+            "data": {
+                "top_rated_dishes": get_top_rated_dishes(),
+                "recent_feedbacks": get_recent_feedbacks(),
+            }
+        }
 
-    # --- recommendations ---
-    if intent == "recommendations":
-        return {"intent": intent, "data": {
-            "recommended_dishes": get_personalized_recommendations(user),
-            "top_rated_dishes":   get_top_rated_dishes(3),
-        }}
+    # --- General lookup (keyword match → fallback) ---
+    matched = get_menu_item_details(message)
+    if matched:
+        return {
+            "intent": "general_lookup",
+            "data": {
+                "matched_menu_items": matched,
+                "similar_items": get_similar_items(message),
+            }
+        }
 
-    # --- restaurant info ---
-    if intent == "restaurant_info":
-        return {"intent": intent, "data": {
-            "restaurant_info": get_restaurant_info(),
-        }}
-
-    # --- table availability ---
-    if intent == "table_availability":
-        return {"intent": intent, "data": {
-            "table_availability": get_table_availability(),
-            "restaurant_info":    {
-                "accepts_reservations": get_restaurant_info()["accepts_reservations"],
-                "phone": get_restaurant_info()["phone"],
-            },
-        }}
-
-    # --- feedback / complaints ---
-    if intent == "feedback":
-        return {"intent": intent, "data": {
-            "user_feedback_history": get_user_feedback_history(user),
-            "contact": {
-                "phone": get_restaurant_info()["phone"],
-                "email": get_restaurant_info()["email"],
-            },
-        }}
-
-    # --- payment ---
-    if intent == "payment":
-        return {"intent": intent, "data": {
-            "payment_info": get_payment_info(),
-        }}
-
-    # --- delivery ---
-    if intent == "delivery":
-        return {"intent": intent, "data": {
-            "delivery_info": get_delivery_info(),
-        }}
-
-    # --- catering ---
-    if intent == "catering":
-        return {"intent": intent, "data": {
-            "catering_info": get_catering_info(),
-        }}
-
-    # --- fallback ---
-    return {"intent": "fallback", "data": {
-        "available_menu_items":  get_available_menu_items(),
-        "most_ordered_dishes":   get_most_ordered_dishes(3),
-        "restaurant_info":       get_restaurant_info(),
-    }}
+    return {
+        "intent": "fallback",
+        "data": {
+            "available_menu_items": get_available_menu_items(limit=15),
+            "most_ordered_dishes": get_most_ordered_dishes(limit=3),
+            "categories": get_menu_categories(),
+        }
+    }
 
 
-# ============================================================
-# OpenAI system prompt
-# ============================================================
+# ----------------------------
+# System prompt
+# ----------------------------
 
 def system_prompt() -> str:
-    return (
-        "You are a smart, friendly, and professional restaurant assistant.\n\n"
-        "STRICT RULES:\n"
-        "1. Answer ONLY from the structured database facts provided to you.\n"
-        "   Never invent dishes, prices, ingredients, ratings, or order details.\n"
-        "2. If information is missing or unavailable, say so clearly and politely.\n"
-        "3. Keep answers concise (2-4 sentences) unless listing items.\n"
-        "4. Format prices as $X.XX.\n"
-        "5. For lists of dishes, use clean bullet-point format with name and price.\n"
-        "6. For dietary questions, mention allergen info if present in the data.\n"
-        "7. For order tracking, always state current status AND what happens next.\n"
-        "8. For recommendations, briefly explain why you suggest each dish.\n"
-        "9. If a user seems frustrated or is complaining, respond with empathy first,\n"
-        "   then offer the relevant information or contact details.\n"
-        "10. Never expose internal field names, IDs, or raw database structures.\n"
-        "11. For reservation requests, provide availability and contact details.\n"
-        "12. For delivery queries, state clearly if delivery is available and the details.\n"
-        "13. For catering, always direct the user to contact the restaurant directly.\n"
-        "14. Be warm, welcoming, and make the customer feel valued."
-    )
+    return """
+You are a knowledgeable, friendly, and helpful restaurant assistant.
+Your goal is to answer EVERY question a guest could possibly ask about this restaurant.
+
+## Core rules
+- Answer ONLY from the structured database facts provided in STRUCTURED DATABASE FACTS.
+- NEVER invent dishes, prices, ingredients, ratings, or order details.
+- If data is missing or not in the facts, say so clearly and offer an alternative (e.g., suggest calling the restaurant).
+- Be concise, warm, and conversational — like a great waiter.
+
+## What you can help with
+- Full menu browsing, dish details, ingredients, pricing
+- Dietary options: vegetarian, vegan, gluten-free, halal, spicy, non-spicy, seafood, chicken, beef, desserts
+- Recommendations: popular dishes, top-rated dishes, chef picks, new items
+- Budget-based suggestions ("what can I get for under $15?")
+- Category browsing ("show me all starters")
+- Combo / pairing suggestions
+- Customer's own order history and favorites
+- Restaurant feedback and reviews
+- Order statistics (for staff/admin queries)
+- Greetings, help, and general restaurant questions
+
+## Response style
+- When listing multiple dishes, use a clear, scannable format.
+- Always mention price when showing dishes unless the user didn't ask.
+- If no exact match, offer the closest available option and acknowledge the mismatch.
+- If multiple dishes match a query, list all of them.
+- For dietary queries, note if nothing matches and suggest alternatives.
+- For missing restaurant info (hours, location), politely acknowledge you don't have that data and suggest contacting the restaurant.
+- Never say "I don't know" without offering something helpful in its place.
+""".strip()
 
 
-# ============================================================
-# Main entry point
-# ============================================================
+# ----------------------------
+# Main entrypoint
+# ----------------------------
 
 def ask_chatbot(user, message: str) -> str:
     context = build_structured_context(user, message)
@@ -820,15 +951,13 @@ def ask_chatbot(user, message: str) -> str:
             },
             {
                 "role": "system",
-                "content": f"STRUCTURED DATABASE FACTS (answer only from this):\n{context}",
+                "content": f"STRUCTURED DATABASE FACTS:\n{context}",
             },
             {
                 "role": "user",
                 "content": message,
             },
         ],
-        temperature=0.4,       # slightly creative but mostly factual
-        max_tokens=600,
     )
 
     return response.choices[0].message.content.strip()

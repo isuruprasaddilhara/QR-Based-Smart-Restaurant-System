@@ -67,6 +67,7 @@ INSTALLED_APPS = [
     "chatbot",
     "analytics",
     'anymail',
+    'favourites',
 ]
 
 # MIDDLEWARE

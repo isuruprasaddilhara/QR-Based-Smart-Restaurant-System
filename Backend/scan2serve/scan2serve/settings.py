@@ -201,9 +201,10 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 ANYMAIL = {
-    "BREVO_API_KEY": os.getenv("BREVO_API_KEY"),
+    "MAILJET_API_KEY": os.getenv("MAILJET_API_KEY"),
+    "MAILJET_SECRET_KEY": os.getenv("MAILJET_SECRET_KEY"),
 }
-EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
+EMAIL_BACKEND = "anymail.backends.mailjet.EmailBackend"
 DEFAULT_FROM_EMAIL = os.getenv("EMAIL_HOST_USER")
 
 # Tells Django to trust the X-Forwarded-Proto header from Nginx

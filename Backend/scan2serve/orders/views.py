@@ -255,7 +255,7 @@ def bill_soft_copy_view(request, order_id):
 
     restaurant = getattr(order.table, 'restaurant', None)
     rest_name  = getattr(restaurant, 'name', 'Scan2Serve Restaurant') if restaurant else 'Scan2Serve Restaurant'
-    from_email = (getattr(restaurant, 'email', None) if restaurant else None) or 'scan2serve.email@gmail.com'
+    from_email = (getattr(restaurant, 'email', None) if restaurant else None) or 'noreply@scan2serve.online'
     tbl_number = getattr(order.table, 'number', getattr(order.table, 'table_number', order.table.pk))
 
     try:

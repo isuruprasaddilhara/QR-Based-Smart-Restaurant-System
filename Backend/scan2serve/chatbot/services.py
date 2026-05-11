@@ -1,8 +1,9 @@
 # services.py
 
 import json
+from collections import defaultdict
 from decimal import Decimal
-from typing import Dict, List, Optional, Any
+from typing import Optional, List
 
 from django.conf import settings
 from django.db.models import (
@@ -14,7 +15,6 @@ from django.db.models import (
     ExpressionWrapper,
     DecimalField,
 )
-from django.utils import timezone
 
 from openai import OpenAI
 
@@ -25,12 +25,21 @@ from tables.models import Table
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
+# =========================================================
+# MEMORY STORAGE
+# =========================================================
+
+# production -> replace with redis/db
+CONVERSATION_MEMORY = defaultdict(list)
+
+MAX_HISTORY = 12
+
 
 # =========================================================
 # HELPERS
 # =========================================================
 
-def money(value) -> str:
+def money(value):
     if value is None:
         return "0.00"
 
@@ -45,7 +54,137 @@ def normalize(text: str) -> str:
 
 
 # =========================================================
-# MENU ENGINE
+# CONVERSATION MEMORY
+# =========================================================
+
+def get_conversation_key(user, session_id=None):
+    if user and user.is_authenticated:
+        return f"user_{user.id}"
+
+    if session_id:
+        return f"guest_{session_id}"
+
+    return "anonymous"
+
+
+def save_message(conversation_key, role, content):
+    CONVERSATION_MEMORY[conversation_key].append({
+        "role": role,
+        "content": content,
+    })
+
+    CONVERSATION_MEMORY[conversation_key] = (
+        CONVERSATION_MEMORY[conversation_key][-MAX_HISTORY:]
+    )
+
+
+def get_conversation_history(conversation_key):
+    return CONVERSATION_MEMORY.get(conversation_key, [])
+
+
+def clear_conversation(conversation_key):
+    CONVERSATION_MEMORY[conversation_key] = []
+
+
+# =========================================================
+# CONTEXT EXTRACTION
+# =========================================================
+
+def extract_context_from_history(history):
+    context = {
+        "last_dish": None,
+        "last_category": None,
+        "last_intent": None,
+    }
+
+    combined_text = " ".join(
+        [
+            msg["content"]
+            for msg in history
+            if msg["role"] == "user"
+        ]
+    ).lower()
+
+    categories = MenuCategory.objects.values_list(
+        "name",
+        flat=True,
+    )
+
+    for category in categories:
+        if category.lower() in combined_text:
+            context["last_category"] = category
+
+    items = MenuItem.objects.all()[:200]
+
+    for item in items:
+        if item.name.lower() in combined_text:
+            context["last_dish"] = item.name
+
+    if "recommend" in combined_text:
+        context["last_intent"] = "recommendation"
+
+    elif "price" in combined_text:
+        context["last_intent"] = "pricing"
+
+    elif "ingredient" in combined_text:
+        context["last_intent"] = "ingredients"
+
+    elif "order" in combined_text:
+        context["last_intent"] = "orders"
+
+    return context
+
+
+# =========================================================
+# FOLLOW-UP QUESTION HANDLER
+# =========================================================
+
+def enhance_message_with_context(message, context):
+    text = message.lower()
+
+    if (
+        "cheapest" in text
+        and context["last_category"]
+    ):
+        return (
+            f"Which item in category "
+            f"{context['last_category']} "
+            f"is cheapest?"
+        )
+
+    if (
+        "most expensive" in text
+        and context["last_category"]
+    ):
+        return (
+            f"Which item in category "
+            f"{context['last_category']} "
+            f"is most expensive?"
+        )
+
+    if (
+        "ingredients" in text
+        and context["last_dish"]
+    ):
+        return (
+            f"What are the ingredients of "
+            f"{context['last_dish']}?"
+        )
+
+    if (
+        "price" in text
+        and context["last_dish"]
+    ):
+        return (
+            f"What is the price of "
+            f"{context['last_dish']}?"
+        )
+
+    return message
+
+
+# =========================================================
+# MENU SEARCH
 # =========================================================
 
 def search_menu_items(
@@ -74,7 +213,9 @@ def search_menu_items(
         queryset = queryset.filter(query)
 
     if category:
-        queryset = queryset.filter(category__name__icontains=category)
+        queryset = queryset.filter(
+            category__name__icontains=category
+        )
 
     if min_price is not None:
         queryset = queryset.filter(price__gte=min_price)
@@ -89,7 +230,9 @@ def search_menu_items(
         ingredient_query = Q()
 
         for ingredient in ingredients:
-            ingredient_query |= Q(ingredients__icontains=ingredient)
+            ingredient_query |= Q(
+                ingredients__icontains=ingredient
+            )
 
         queryset = queryset.filter(ingredient_query)
 
@@ -110,14 +253,23 @@ def search_menu_items(
     ]
 
 
+# =========================================================
+# CATEGORIES
+# =========================================================
+
 def get_menu_categories():
     return list(
-        MenuCategory.objects.order_by("name").values_list("name", flat=True)
+        MenuCategory.objects.order_by(
+            "name"
+        ).values_list(
+            "name",
+            flat=True,
+        )
     )
 
 
 # =========================================================
-# POPULAR / TOP RATED
+# POPULAR DISHES
 # =========================================================
 
 def get_most_ordered_dishes(limit=5):
@@ -146,15 +298,26 @@ def get_most_ordered_dishes(limit=5):
     ]
 
 
+# =========================================================
+# TOP RATED
+# =========================================================
+
 def get_top_rated_dishes(limit=5):
     rows = (
         MenuItem.objects
         .annotate(
-            avg_rating=Avg("orderitem__order__feedback__rating"),
-            review_count=Count("orderitem__order__feedback"),
+            avg_rating=Avg(
+                "orderitem__order__feedback__rating"
+            ),
+            review_count=Count(
+                "orderitem__order__feedback"
+            ),
         )
         .filter(review_count__gt=0)
-        .order_by("-avg_rating", "-review_count")[:limit]
+        .order_by(
+            "-avg_rating",
+            "-review_count",
+        )[:limit]
     )
 
     return [
@@ -169,10 +332,13 @@ def get_top_rated_dishes(limit=5):
 
 
 # =========================================================
-# RECOMMENDATION ENGINE
+# RECOMMENDATIONS
 # =========================================================
 
-def get_personalized_recommendations(user, limit=5):
+def get_personalized_recommendations(
+    user,
+    limit=5,
+):
     if not user or not user.is_authenticated:
         return get_most_ordered_dishes(limit)
 
@@ -237,7 +403,9 @@ def get_user_recent_orders(user, limit=5):
         items = []
 
         for item in order.items.all():
-            line_total = item.price * item.quantity
+            line_total = (
+                item.price * item.quantity
+            )
 
             items.append({
                 "dish": item.menu_item.name,
@@ -249,9 +417,17 @@ def get_user_recent_orders(user, limit=5):
         data.append({
             "order_id": order.id,
             "status": order.status,
-            "table": order.table.table_number if order.table else None,
-            "total_amount": money(order.total_amount),
-            "special_notes": order.special_notes or "",
+            "table": (
+                order.table.table_number
+                if order.table
+                else None
+            ),
+            "total_amount": money(
+                order.total_amount
+            ),
+            "special_notes": (
+                order.special_notes or ""
+            ),
             "created_at": str(order.created_at),
             "items": items,
         })
@@ -267,7 +443,9 @@ def get_available_tables(capacity=None):
     tables = Table.objects.filter(status=False)
 
     if capacity:
-        tables = tables.filter(capacity__gte=capacity)
+        tables = tables.filter(
+            capacity__gte=capacity
+        )
 
     return [
         {
@@ -306,13 +484,26 @@ def get_order_statistics():
         .get("total")
     ) or Decimal("0.00")
 
-    pending = Order.objects.filter(status="pending").count()
-    preparing = Order.objects.filter(status="preparing").count()
-    served = Order.objects.filter(status="served").count()
-    completed = Order.objects.filter(status="completed").count()
+    pending = Order.objects.filter(
+        status="pending"
+    ).count()
+
+    preparing = Order.objects.filter(
+        status="preparing"
+    ).count()
+
+    served = Order.objects.filter(
+        status="served"
+    ).count()
+
+    completed = Order.objects.filter(
+        status="completed"
+    ).count()
 
     average_rating = (
-        Feedback.objects.aggregate(avg=Avg("rating")).get("avg")
+        Feedback.objects
+        .aggregate(avg=Avg("rating"))
+        .get("avg")
     )
 
     return {
@@ -322,16 +513,20 @@ def get_order_statistics():
         "preparing_orders": preparing,
         "served_orders": served,
         "completed_orders": completed,
-        "average_rating": round(average_rating, 2)
-        if average_rating
-        else None,
+        "average_rating": (
+            round(average_rating, 2)
+            if average_rating
+            else None
+        ),
     }
 
 
 def get_sales_by_category():
     rows = (
         OrderItem.objects
-        .values("menu_item__category__name")
+        .values(
+            "menu_item__category__name"
+        )
         .annotate(
             revenue=Sum(
                 ExpressionWrapper(
@@ -345,7 +540,9 @@ def get_sales_by_category():
 
     return [
         {
-            "category": row["menu_item__category__name"],
+            "category": row[
+                "menu_item__category__name"
+            ],
             "revenue": money(row["revenue"]),
         }
         for row in rows
@@ -353,7 +550,7 @@ def get_sales_by_category():
 
 
 # =========================================================
-# FEEDBACK ANALYSIS
+# FEEDBACK
 # =========================================================
 
 def get_feedback_summary(limit=10):
@@ -375,7 +572,7 @@ def get_feedback_summary(limit=10):
 
 
 # =========================================================
-# TOOL FUNCTIONS
+# TOOL DEFINITIONS
 # =========================================================
 
 TOOLS = [
@@ -389,11 +586,19 @@ TOOLS = [
                 "properties": {
                     "keywords": {
                         "type": "array",
-                        "items": {"type": "string"},
+                        "items": {
+                            "type": "string"
+                        },
                     },
-                    "category": {"type": "string"},
-                    "min_price": {"type": "number"},
-                    "max_price": {"type": "number"},
+                    "category": {
+                        "type": "string"
+                    },
+                    "min_price": {
+                        "type": "number"
+                    },
+                    "max_price": {
+                        "type": "number"
+                    },
                 },
             },
         },
@@ -402,7 +607,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "get_popular_dishes",
-            "description": "Get most ordered dishes",
+            "description": "Get popular dishes",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -423,8 +628,19 @@ TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "get_recommendations",
+            "description": "Get personalized recommendations",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "get_user_orders",
-            "description": "Get recent orders of authenticated user",
+            "description": "Get user recent orders",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -439,7 +655,9 @@ TOOLS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "capacity": {"type": "integer"},
+                    "capacity": {
+                        "type": "integer"
+                    },
                 },
             },
         },
@@ -462,13 +680,25 @@ TOOLS = [
 # TOOL EXECUTION
 # =========================================================
 
-def execute_tool(tool_name, arguments, user):
+def execute_tool(
+    tool_name,
+    arguments,
+    user,
+):
     if tool_name == "search_menu":
         return search_menu_items(
-            keywords=arguments.get("keywords"),
-            category=arguments.get("category"),
-            min_price=arguments.get("min_price"),
-            max_price=arguments.get("max_price"),
+            keywords=arguments.get(
+                "keywords"
+            ),
+            category=arguments.get(
+                "category"
+            ),
+            min_price=arguments.get(
+                "min_price"
+            ),
+            max_price=arguments.get(
+                "max_price"
+            ),
         )
 
     if tool_name == "get_popular_dishes":
@@ -477,22 +707,35 @@ def execute_tool(tool_name, arguments, user):
     if tool_name == "get_top_rated":
         return get_top_rated_dishes()
 
+    if tool_name == "get_recommendations":
+        return get_personalized_recommendations(
+            user
+        )
+
     if tool_name == "get_user_orders":
         return get_user_recent_orders(user)
 
     if tool_name == "get_tables":
         return get_available_tables(
-            capacity=arguments.get("capacity")
+            capacity=arguments.get(
+                "capacity"
+            )
         )
 
     if tool_name == "get_analytics":
         return {
             "stats": get_order_statistics(),
-            "sales_by_category": get_sales_by_category(),
-            "popular_dishes": get_most_ordered_dishes(),
+            "sales_by_category":
+                get_sales_by_category(),
+            "popular_dishes":
+                get_most_ordered_dishes(),
+            "top_rated":
+                get_top_rated_dishes(),
         }
 
-    return {"error": "Unknown tool"}
+    return {
+        "error": "Unknown tool"
+    }
 
 
 # =========================================================
@@ -510,20 +753,24 @@ You are an advanced AI restaurant assistant.
 
 Rules:
 - ONLY use provided database facts
-- NEVER hallucinate dishes, prices, or analytics
-- If information is unavailable, say clearly
-- Be conversational and concise
+- NEVER hallucinate dishes, prices, ratings, or analytics
+- If information is unavailable, clearly say so
+- Be friendly and conversational
+- Understand follow-up questions
+- Use conversation memory
 - Recommend dishes intelligently
 - Personalize responses when possible
 
 Capabilities:
 - Menu search
-- Dish recommendations
+- Recommendations
 - Order tracking
-- Analytics
 - Table availability
-- Ratings and popularity
-- Customer history
+- Analytics
+- Ingredients
+- Pricing
+- Ratings
+- Personalized suggestions
 
 Current user role: {role}
 """
@@ -533,36 +780,98 @@ Current user role: {role}
 # MAIN CHATBOT
 # =========================================================
 
-def ask_chatbot(user, message: str) -> str:
+def ask_chatbot(
+    user,
+    message,
+    session_id=None,
+):
+    conversation_key = (
+        get_conversation_key(
+            user,
+            session_id,
+        )
+    )
+
+    # previous conversation
+    history = get_conversation_history(
+        conversation_key
+    )
+
+    # extract conversational context
+    history_context = (
+        extract_context_from_history(
+            history
+        )
+    )
+
+    # improve follow-up questions
+    enhanced_message = (
+        enhance_message_with_context(
+            message,
+            history_context,
+        )
+    )
+
+    # save user message
+    save_message(
+        conversation_key,
+        "user",
+        enhanced_message,
+    )
+
+    # rebuild history
+    history = get_conversation_history(
+        conversation_key
+    )
+
     messages = [
         {
             "role": "system",
-            "content": build_system_prompt(user),
-        },
-        {
-            "role": "user",
-            "content": message,
-        },
+            "content": (
+                build_system_prompt(user)
+            ),
+        }
     ]
 
-    first_response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=messages,
-        tools=TOOLS,
-        tool_choice="auto",
+    # inject memory
+    messages.extend(history)
+
+    # =====================================================
+    # FIRST AI RESPONSE
+    # =====================================================
+
+    first_response = (
+        client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=messages,
+            tools=TOOLS,
+            tool_choice="auto",
+        )
     )
 
-    response_message = first_response.choices[0].message
+    response_message = (
+        first_response
+        .choices[0]
+        .message
+    )
 
     tool_calls = response_message.tool_calls
+
+    # =====================================================
+    # TOOL CALLING
+    # =====================================================
 
     if tool_calls:
         messages.append(response_message)
 
         for tool_call in tool_calls:
-            tool_name = tool_call.function.name
+            tool_name = (
+                tool_call.function.name
+            )
 
-            arguments = json.loads(tool_call.function.arguments)
+            arguments = json.loads(
+                tool_call.function.arguments
+            )
 
             result = execute_tool(
                 tool_name,
@@ -571,17 +880,77 @@ def ask_chatbot(user, message: str) -> str:
             )
 
             messages.append({
-                "tool_call_id": tool_call.id,
+                "tool_call_id":
+                    tool_call.id,
                 "role": "tool",
                 "name": tool_name,
-                "content": json.dumps(result),
+                "content":
+                    json.dumps(result),
             })
 
-        final_response = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=messages,
+        # =================================================
+        # FINAL RESPONSE
+        # =================================================
+
+        final_response = (
+            client.chat.completions.create(
+                model="gpt-4.1-mini",
+                messages=messages,
+            )
         )
 
-        return final_response.choices[0].message.content
+        final_text = (
+            final_response
+            .choices[0]
+            .message
+            .content
+        )
 
-    return response_message.content
+        # save assistant response
+        save_message(
+            conversation_key,
+            "assistant",
+            final_text,
+        )
+
+        return final_text
+
+    # =====================================================
+    # NORMAL RESPONSE
+    # =====================================================
+
+    final_text = response_message.content
+
+    save_message(
+        conversation_key,
+        "assistant",
+        final_text,
+    )
+
+    return final_text
+
+
+# =========================================================
+# RESET CHAT
+# =========================================================
+
+def reset_chat(
+    user,
+    session_id=None,
+):
+    conversation_key = (
+        get_conversation_key(
+            user,
+            session_id,
+        )
+    )
+
+    clear_conversation(
+        conversation_key
+    )
+
+    return {
+        "success": True,
+        "message":
+            "Conversation reset successfully",
+    }

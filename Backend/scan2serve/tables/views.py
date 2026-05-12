@@ -77,8 +77,8 @@ def download_qr(request, pk):
     except Table.DoesNotExist:
         return Response({'error': 'Table not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    base_url = request.query_params.get('base_url', 'https://scan2serve-1.web.app/')
-    buffer = build_qr_image(table, base_url=base_url)  # pass full table object
+    url = request.query_params.get('url', 'https://scan2serve-1.web.app/')
+    buffer = build_qr_image(table, url=url)  # pass full table object
 
     response = FileResponse(buffer, content_type='image/png')
     response['Content-Disposition'] = f'attachment; filename="table_{table.table_number}_qr.png"'

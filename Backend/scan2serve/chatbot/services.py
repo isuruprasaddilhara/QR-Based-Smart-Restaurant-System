@@ -532,6 +532,7 @@ Rules:
 - Use previous messages to understand intent
 - Recommend dishes intelligently
 - Personalize responses when possible
+- give answers even if user provide with spelling mistakes and short names (eg: "piz" for "pizza" or "coke" for "coca-cola" or vegi for vegetarian)
 
 Current user role: {role}
 """

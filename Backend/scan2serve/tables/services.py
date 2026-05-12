@@ -4,6 +4,9 @@ from io import BytesIO
 from .models import Table
 
 def create_table_with_qr ( table_number: int, section: str = None, capacity: int = 2) -> Table:
+    existing = Table.objects.filter(table_number=table_number).first()
+    if existing:
+        raise ValueError(f"Table {table_number} already exists.")
     token = str(uuid.uuid4())
     table = Table.objects.create(table_number=table_number, qr_code=token, status=False, section=section, capacity=capacity)
     return table

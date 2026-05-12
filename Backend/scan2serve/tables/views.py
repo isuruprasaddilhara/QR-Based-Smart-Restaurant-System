@@ -16,14 +16,17 @@ def table_list(request):
         tables = Table.objects.all()
         serializer = TableSerializer(tables, many=True, context={'request': request})
         return Response(serializer.data)
-
+    
     if request.method == 'POST':
-        table_number = request.data.get('table_number')
-        section = request.data.get('section', None)
-        capacity = request.data.get('capacity', 2)
-        table = create_table_with_qr(table_number=table_number, section=section, capacity=capacity)
-        serializer = TableSerializer(table, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        try:
+            table_number = request.data.get('table_number')
+            section = request.data.get('section', None)
+            capacity = request.data.get('capacity', 2)
+            table = create_table_with_qr(table_number=table_number, section=section, capacity=capacity)
+            serializer = TableSerializer(table, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])

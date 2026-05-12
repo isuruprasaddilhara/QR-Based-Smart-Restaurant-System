@@ -22,6 +22,9 @@ class OrderItemCreateSerializer(serializers.ModelSerializer):
 
 
 class FeedbackSerializer(serializers.ModelSerializer):
+    order_id = serializers.IntegerField(source='order.id', read_only=True)
+    order_created_at = serializers.DateTimeField(source='order.created_at', read_only=True)
+
     class Meta:
         model = Feedback
         fields = ['id', 'order_id', 'order_created_at', 'rating', 'comment']

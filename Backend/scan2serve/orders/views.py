@@ -143,6 +143,7 @@ class OrderStatusUpdateView(APIView):
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+
 # ── Feedback Views ─────────────────────────────────────────────────────────────
 
 class FeedbackCreateView(OrderAccessMixin, generics.CreateAPIView):
@@ -151,6 +152,7 @@ class FeedbackCreateView(OrderAccessMixin, generics.CreateAPIView):
     serializer_class = FeedbackSerializer
 
     def perform_create(self, serializer):
+        # Re-use access control: owner, guest token, or staff only.
         order = self.get_order(self.kwargs['pk'])
 
         if hasattr(order, 'feedback'):
@@ -166,30 +168,46 @@ class FeedbackListView(generics.ListAPIView):
     queryset = Feedback.objects.select_related('order').all()
 
 
-class FeedbackDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):
-    """GET/PATCH/DELETE /orders/<pk>/feedback/detail/ — Retrieve, update, or delete feedback."""
+class FeedbackDetailView(OrderAccessMixin, generics.RetrieveUpdateAPIView):
+    """GET/PATCH /orders/<pk>/feedback/detail/ — Retrieve or update feedback."""
+
+    def get_permissions(self):
+        if self.request.method == 'GET':
+            # Ownership / guest-token check is enforced in get_object()
+            return [AllowAny()]
+        return [IsStaff()]
 
     serializer_class = FeedbackSerializer
 
-    def get_permissions(self):
-        if self.request.method in ('PATCH', 'PUT'):
-            return [IsStaff()]
-        # GET and DELETE rely on OrderAccessMixin ownership checks in get_object()
-        return [AllowAny()]
-
     def get_object(self):
-        # Enforces owner / guest-token / staff access on the parent order.
+        # Validate the requester can access the parent order first.
         self.get_order(self.kwargs['pk'])
         return get_object_or_404(Feedback, order__pk=self.kwargs['pk'])
 
-    def perform_destroy(self, instance):
-        order = self.get_order(self.kwargs['pk'])
-        # Staff can delete any feedback; owners/guests can only delete their own.
-        if not self.request.user.is_staff:
-            if order.user != self.request.user:
-                raise PermissionDenied("You can only delete your own feedback.")
-        instance.delete()
-        
+class FeedbackDeleteView(OrderAccessMixin, generics.DestroyAPIView):
+    """DELETE /orders/<pk>/feedback/ — Owner or guest deletes their own feedback."""
+
+    permission_classes = [AllowAny]
+
+    def get_object(self):
+        # get_order() enforces ownership / guest-token check on the parent order
+        self.get_order(self.kwargs['pk'])
+        return get_object_or_404(Feedback, order__pk=self.kwargs['pk'])
+
+class CustomerFeedbackListView(generics.ListAPIView):
+    """GET /feedbacks/my-feedbacks/ — List all feedbacks for the authenticated customer."""
+    serializer_class = FeedbackSerializer
+    permission_classes = [IsCustomer]
+
+    def get_queryset(self):
+        return (
+            Feedback.objects
+            .filter(order__user=self.request.user)
+            .select_related('order')
+            .order_by('-order__created_at')
+        )
+
+
 # ── Bill / Request-Bill Views ──────────────────────────────────────────────────
 
 @api_view(['POST'])
@@ -436,25 +454,3 @@ class UserOrderListView(generics.ListAPIView):
             'orders': serializer.data,
         })
 
-class FeedbackDeleteView(OrderAccessMixin, generics.DestroyAPIView):
-    """DELETE /orders/<pk>/feedback/ — Owner or guest deletes their own feedback."""
-
-    permission_classes = [AllowAny]
-
-    def get_object(self):
-        # get_order() enforces ownership / guest-token check on the parent order
-        self.get_order(self.kwargs['pk'])
-        return get_object_or_404(Feedback, order__pk=self.kwargs['pk'])
-
-class CustomerFeedbackListView(generics.ListAPIView):
-    """GET /feedbacks/my-feedbacks/ — List all feedbacks for the authenticated customer."""
-    serializer_class = FeedbackSerializer
-    permission_classes = [IsCustomer]
-
-    def get_queryset(self):
-        return (
-            Feedback.objects
-            .filter(order__user=self.request.user)
-            .select_related('order')
-            .order_by('-order__created_at')
-        )

@@ -36,11 +36,16 @@ class OrderCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("An order must have at least one item.")
         return items
 
+    from decimal import Decimal
+
+    SERVICE_CHARGE_RATE = Decimal("0.05")  # 5%
+    TAX_RATE            = Decimal("0.08")  # 8%
+
     def create(self, validated_data):
         items_data = validated_data.pop('items')
 
         # Derive price from MenuItem and calculate total
-        total = 0
+        subtotal = Decimal("0")
         enriched_items = []
         for item in items_data:
             menu_item = item['menu_item']
@@ -51,22 +56,31 @@ class OrderCreateSerializer(serializers.ModelSerializer):
                 )
 
             unit_price = menu_item.price
-            quantity = item['quantity']
+            quantity   = item['quantity']
             line_total = unit_price * quantity
-            total += line_total
+            subtotal  += line_total
             enriched_items.append({
                 'menu_item': menu_item,
-                'quantity': quantity,
-                'price': line_total,   # price stored as line total (unit * qty)
+                'quantity':  quantity,
+                'price':     line_total,  # stored as line total (unit * qty)
             })
 
-        order = Order.objects.create(total_amount=total, **validated_data)
+        service_charge = (subtotal * SERVICE_CHARGE_RATE).quantize(Decimal("0.01"))
+        tax            = (subtotal * TAX_RATE).quantize(Decimal("0.01"))
+        total_amount   = subtotal + service_charge + tax
+
+        order = Order.objects.create(
+            subtotal=subtotal,
+            service_charge=service_charge,
+            tax=tax,
+            total_amount=total_amount,
+            **validated_data,
+        )
 
         for item_data in enriched_items:
             OrderItem.objects.create(order=order, **item_data)
 
         return order
-
 
 class OrderStatusSerializer(serializers.ModelSerializer):
     class Meta:

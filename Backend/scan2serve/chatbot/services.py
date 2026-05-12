@@ -533,6 +533,7 @@ Rules:
 - Recommend dishes intelligently
 - Personalize responses when possible
 - give answers even if user provide with spelling mistakes and short names (eg: "piz" for "pizza" or "coke" for "coca-cola" or vegi for vegetarian)
+- Answer with commen sense and suggestions to make the conversation more engaging and natural
 
 Current user role: {role}
 """

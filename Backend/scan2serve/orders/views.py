@@ -117,13 +117,17 @@ class OrderDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):
     serializer_class = OrderSerializer
 
     def get_permissions(self):
-        if self.request.method == 'GET':
-            # Ownership / guest-token check is enforced in get_object().
+        if self.request.method in ('GET', 'DELETE'):
             return [AllowAny()]
         return [(IsAdmin | IsCashier | IsKitchen)()]
 
     def get_object(self):
         return self.get_order(self.kwargs['pk'])
+
+    def perform_destroy(self, instance):
+        if instance.status not in ('pending', 'requested'):
+            raise ValidationError("Only pending or requested orders can be deleted.")
+        instance.delete()
 
 
 class OrderStatusUpdateView(APIView):

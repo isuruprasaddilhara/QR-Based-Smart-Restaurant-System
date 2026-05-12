@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import Order, OrderItem, Feedback
-
+from decimal import Decimal
 
 class OrderItemSerializer(serializers.ModelSerializer):
     menu_item_name = serializers.CharField(source='menu_item.name', read_only=True)
@@ -35,8 +35,6 @@ class OrderCreateSerializer(serializers.ModelSerializer):
         if not items:
             raise serializers.ValidationError("An order must have at least one item.")
         return items
-
-    from decimal import Decimal
 
     SERVICE_CHARGE_RATE = Decimal("0.05")  # 5%
     TAX_RATE            = Decimal("0.08")  # 8%

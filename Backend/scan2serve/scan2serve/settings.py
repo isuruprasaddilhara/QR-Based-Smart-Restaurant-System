@@ -202,6 +202,15 @@ CORS_ALLOWED_ORIGINS = [
     "https://scan2serve.online",
 ]
 
+
+# ↓ Add this
+from corsheaders.defaults import default_headers
+
+CORS_ALLOW_HEADERS = [
+    *default_headers,
+    "X-Guest-Token",
+    "X-ESP32-Token",
+]
 # ANYMAIL = {
 #     "MAILJET_API_KEY": os.getenv("MAILJET_API_KEY"),
 #     "MAILJET_SECRET_KEY": os.getenv("MAILJET_SECRET_KEY"),

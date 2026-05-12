@@ -36,7 +36,7 @@ export function mapTableFromApi(row) {
   const displayNo = row.table_number ?? row.id;
 
   return {
-    id: row.id,
+    id: row.table_number,
     tableNo: displayNo,
     qrCode: row.qr_code,
     section: row.section ?? "",

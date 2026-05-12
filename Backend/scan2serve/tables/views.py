@@ -81,7 +81,7 @@ def download_qr(request, pk):
     buffer = build_qr_image(table, base_url=base_url)  # pass full table object
 
     response = FileResponse(buffer, content_type='image/png')
-    response['Content-Disposition'] = f'attachment; filename="table_{table.id}_qr.png"'
+    response['Content-Disposition'] = f'attachment; filename="table_{table.table_number}_qr.png"'
     return response
 
 

@@ -85,7 +85,7 @@ def clear_conversation(conversation_key):
 
 
 # =========================================================
-# CONTEXT EXTRACTION
+# CONTEXT EXTRACTION  (FIXED)
 # =========================================================
 
 def extract_context_from_history(history):
@@ -94,14 +94,20 @@ def extract_context_from_history(history):
         "last_dish": None,
         "last_category": None,
         "last_intent": None,
+        "last_recommended_dishes": [],   # NEW: track all recently mentioned dishes
     }
 
-    # ONLY LOOK AT RECENT MESSAGES
+    # Only look at recent messages
     recent_messages = history[-10:]
 
-    # reverse search → newest first
+    # Pre-load all menu items and categories once (no arbitrary limit)
+    all_items = list(MenuItem.objects.select_related("category").all())
+    all_categories = list(MenuCategory.objects.all())
+
+    # Reverse search → newest first so we get the MOST RECENT context
     for msg in reversed(recent_messages):
 
+        role = msg.get("role", "")
         content = (
             str(msg.get("content", ""))
             .lower()
@@ -113,29 +119,31 @@ def extract_context_from_history(history):
 
         # =================================================
         # FIND LAST MENU ITEM
+        # Fix: previously used name__icontains=content (backwards).
+        # Now correctly checks: item.name.lower() in content
+        # Prioritise assistant messages since that's where
+        # recommendations are stated.
         # =================================================
 
         if not context["last_dish"]:
 
-            matched_item = (
-                MenuItem.objects
-                .filter(name__icontains=content)
-                .first()
-            )
+            for item in all_items:
+                if item.name.lower() in content:
+                    context["last_dish"] = item.name
+                    break
 
-            if matched_item:
-                context["last_dish"] = matched_item.name
+        # Collect ALL dishes mentioned in assistant messages
+        # so we can refer back to any of them
+        if role == "assistant" and not context["last_recommended_dishes"]:
 
-            else:
+            mentioned = [
+                item.name
+                for item in all_items
+                if item.name.lower() in content
+            ]
 
-                # fuzzy partial match
-                items = MenuItem.objects.all()[:200]
-
-                for item in items:
-
-                    if item.name.lower() in content:
-                        context["last_dish"] = item.name
-                        break
+            if mentioned:
+                context["last_recommended_dishes"] = mentioned
 
         # =================================================
         # FIND LAST CATEGORY
@@ -143,9 +151,7 @@ def extract_context_from_history(history):
 
         if not context["last_category"]:
 
-            categories = MenuCategory.objects.all()
-
-            for category in categories:
+            for category in all_categories:
 
                 if category.name.lower() in content:
                     context["last_category"] = category.name
@@ -199,11 +205,20 @@ def extract_context_from_history(history):
             ):
                 context["last_intent"] = "details"
 
+        # Stop early once we have everything we need
+        if (
+            context["last_dish"]
+            and context["last_category"]
+            and context["last_intent"]
+            and context["last_recommended_dishes"]
+        ):
+            break
+
     return context
 
 
 # =========================================================
-# FOLLOW-UP HANDLER
+# FOLLOW-UP HANDLER  (FIXED)
 # =========================================================
 
 FOLLOW_UP_KEYWORDS = [
@@ -218,6 +233,18 @@ FOLLOW_UP_KEYWORDS = [
     "describe it",
 ]
 
+AFFIRMATIVE_KEYWORDS = [
+    "yes",
+    "yeah",
+    "yep",
+    "sure",
+    "ok",
+    "okay",
+    "go ahead",
+    "please",
+    "do it",
+]
+
 
 def enhance_message_with_context(
     message,
@@ -229,37 +256,61 @@ def enhance_message_with_context(
     last_dish = context.get("last_dish")
     last_category = context.get("last_category")
     last_intent = context.get("last_intent")
+    last_recommended_dishes = context.get("last_recommended_dishes", [])
+
+    # Build a readable list of recently recommended dishes
+    # e.g. "Grilled Chicken and Vanilla Ice Cream"
+    recommended_label = (
+        " and ".join(last_recommended_dishes)
+        if last_recommended_dishes
+        else None
+    )
 
     # =====================================================
-    # YES / OKAY HANDLING
+    # YES / AFFIRMATIVE HANDLING  (FIXED)
+    # Previously fell through when last_dish was None,
+    # sending raw "yes" to GPT with no context.
+    # Now has layered fallbacks so context is always clear.
     # =====================================================
 
-    if text in [
-        "yes",
-        "yeah",
-        "yep",
-        "sure",
-        "ok",
-        "okay",
-    ]:
+    if text in AFFIRMATIVE_KEYWORDS:
 
+        # Best case: we know the exact last dish
         if last_dish:
             return (
-                f"Tell me more about "
-                f"{last_dish}"
+                f"Tell me more details about {last_dish}, "
+                f"including its description, ingredients, "
+                f"price, and any recommendations."
             )
 
+        # Good case: we know multiple recommended dishes
+        if recommended_label:
+            return (
+                f"Tell me more details about "
+                f"{recommended_label}, including their "
+                f"descriptions, ingredients, prices, "
+                f"and any recommendations."
+            )
+
+        # Fallback: we know the category
         if last_category:
             return (
-                f"Recommend more dishes "
-                f"from {last_category}"
+                f"Recommend more dishes from the "
+                f"{last_category} category with details."
             )
 
+        # Last resort: ask GPT to elaborate on whatever it last said
+        return (
+            "Please give more details about the items "
+            "you just recommended, including descriptions, "
+            "ingredients, and prices."
+        )
+
     # =====================================================
-    # DETAILS HANDLING
+    # DETAILS HANDLING  (FIXED)
     # =====================================================
 
-    if text in FOLLOW_UP_KEYWORDS:
+    if any(kw in text for kw in FOLLOW_UP_KEYWORDS):
 
         if last_dish:
 
@@ -268,6 +319,13 @@ def enhance_message_with_context(
                 f"{last_dish} including "
                 f"description, ingredients, "
                 f"price and recommendations."
+            )
+
+        if recommended_label:
+            return (
+                f"Give full details about {recommended_label} "
+                f"including descriptions, ingredients, "
+                f"prices and recommendations."
             )
 
     # =====================================================
@@ -284,6 +342,9 @@ def enhance_message_with_context(
             f"{last_dish}?"
         )
 
+    if "price" in text and recommended_label:
+        return f"What are the prices of {recommended_label}?"
+
     # =====================================================
     # INGREDIENT FOLLOW-UP
     # =====================================================
@@ -297,6 +358,9 @@ def enhance_message_with_context(
             f"What ingredients are in "
             f"{last_dish}?"
         )
+
+    if "ingredient" in text and recommended_label:
+        return f"What ingredients are in {recommended_label}?"
 
     # =====================================================
     # CHEAPEST / EXPENSIVE

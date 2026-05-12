@@ -125,8 +125,8 @@ class OrderDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):
         return self.get_order(self.kwargs['pk'])
 
     def perform_destroy(self, instance):
-        if instance.status not in ('pending', 'requested'):
-            raise ValidationError("Only pending or requested orders can be deleted.")
+        if instance.status not in ('pending'):
+            raise ValidationError("Only pending orders can be deleted.")
         instance.delete()
 
 

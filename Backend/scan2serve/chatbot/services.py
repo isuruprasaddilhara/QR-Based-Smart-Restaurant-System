@@ -88,13 +88,54 @@ def clear_conversation(conversation_key):
 # CONTEXT EXTRACTION  (FIXED)
 # =========================================================
 
+def _extract_text_from_message(msg):
+    """
+    Safely extract searchable text from any message type.
+
+    - role: user / assistant (final reply) → msg["content"] is a plain str
+    - role: assistant with tool_calls      → content is None; returns ""
+    - role: tool                           → content is a JSON string of
+                                             the tool result; parse it so
+                                             dish names are searchable
+    """
+
+    role = msg.get("role", "")
+    raw = msg.get("content")
+
+    # Tool result messages: content is a JSON string
+    if role == "tool" and raw:
+        try:
+            parsed = json.loads(raw)
+            # parsed is a list of dicts e.g. [{"name": "Grilled Chicken", ...}]
+            if isinstance(parsed, list):
+                return " ".join(
+                    str(item.get("name", "")) + " " +
+                    str(item.get("description", "")) + " " +
+                    str(item.get("category", ""))
+                    for item in parsed
+                ).lower().strip()
+            if isinstance(parsed, dict):
+                return (
+                    str(parsed.get("name", "")) + " " +
+                    str(parsed.get("description", ""))
+                ).lower().strip()
+        except (json.JSONDecodeError, AttributeError):
+            return normalize(str(raw))
+
+    # Normal text messages (user / assistant final reply)
+    if raw and isinstance(raw, str):
+        return normalize(raw)
+
+    return ""
+
+
 def extract_context_from_history(history):
 
     context = {
         "last_dish": None,
         "last_category": None,
         "last_intent": None,
-        "last_recommended_dishes": [],   # NEW: track all recently mentioned dishes
+        "last_recommended_dishes": [],
     }
 
     # Only look at recent messages
@@ -108,21 +149,17 @@ def extract_context_from_history(history):
     for msg in reversed(recent_messages):
 
         role = msg.get("role", "")
-        content = (
-            str(msg.get("content", ""))
-            .lower()
-            .strip()
-        )
+
+        # Use helper to safely extract text from any message type
+        content = _extract_text_from_message(msg)
 
         if not content:
             continue
 
         # =================================================
         # FIND LAST MENU ITEM
-        # Fix: previously used name__icontains=content (backwards).
-        # Now correctly checks: item.name.lower() in content
-        # Prioritise assistant messages since that's where
-        # recommendations are stated.
+        # Correctly checks: item.name.lower() in content
+        # Scans tool results AND assistant text messages.
         # =================================================
 
         if not context["last_dish"]:
@@ -132,9 +169,8 @@ def extract_context_from_history(history):
                     context["last_dish"] = item.name
                     break
 
-        # Collect ALL dishes mentioned in assistant messages
-        # so we can refer back to any of them
-        if role == "assistant" and not context["last_recommended_dishes"]:
+        # Collect ALL dishes mentioned in assistant OR tool messages
+        if role in ("assistant", "tool") and not context["last_recommended_dishes"]:
 
             mentioned = [
                 item.name
@@ -268,9 +304,7 @@ def enhance_message_with_context(
 
     # =====================================================
     # YES / AFFIRMATIVE HANDLING  (FIXED)
-    # Previously fell through when last_dish was None,
-    # sending raw "yes" to GPT with no context.
-    # Now has layered fallbacks so context is always clear.
+    # Layered fallbacks so context is always passed to GPT.
     # =====================================================
 
     if text in AFFIRMATIVE_KEYWORDS:

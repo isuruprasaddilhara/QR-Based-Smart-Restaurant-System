@@ -11,17 +11,13 @@ from django.db.models import (
     Count,
     Sum,
     Q,
-    F,
-    ExpressionWrapper,
-    DecimalField,
 )
 
 from openai import OpenAI
 
 from menu.models import MenuItem, MenuCategory
-from orders.models import Order, OrderItem, Feedback
+from orders.models import OrderItem
 from favourites.models import FavoriteMenuItem
-from tables.models import Table
 
 client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
@@ -29,10 +25,9 @@ client = OpenAI(api_key=settings.OPENAI_API_KEY)
 # MEMORY STORAGE
 # =========================================================
 
-# production -> use redis/database
 CONVERSATION_MEMORY = defaultdict(list)
 
-MAX_HISTORY = 50
+MAX_HISTORY = 30
 
 
 # =========================================================
@@ -40,6 +35,7 @@ MAX_HISTORY = 50
 # =========================================================
 
 def money(value):
+
     if value is None:
         return "0.00"
 
@@ -50,6 +46,7 @@ def money(value):
 
 
 def normalize(text: str):
+
     return (text or "").strip().lower()
 
 
@@ -58,6 +55,7 @@ def normalize(text: str):
 # =========================================================
 
 def get_conversation_key(user, session_id=None):
+
     if user and user.is_authenticated:
         return f"user_{user.id}"
 
@@ -68,9 +66,6 @@ def get_conversation_key(user, session_id=None):
 
 
 def save_message(conversation_key, message):
-    """
-    Store FULL message objects
-    """
 
     CONVERSATION_MEMORY[conversation_key].append(message)
 
@@ -80,10 +75,12 @@ def save_message(conversation_key, message):
 
 
 def get_conversation_history(conversation_key):
+
     return CONVERSATION_MEMORY.get(conversation_key, [])
 
 
 def clear_conversation(conversation_key):
+
     CONVERSATION_MEMORY[conversation_key] = []
 
 
@@ -99,103 +96,230 @@ def extract_context_from_history(history):
         "last_intent": None,
     }
 
-    combined_text = " ".join(
-        [
+    # ONLY LOOK AT RECENT MESSAGES
+    recent_messages = history[-10:]
+
+    # reverse search → newest first
+    for msg in reversed(recent_messages):
+
+        content = (
             str(msg.get("content", ""))
-            for msg in history
-            if msg.get("content")
-        ]
-    ).lower()
+            .lower()
+            .strip()
+        )
 
-    # categories
-    categories = MenuCategory.objects.values_list(
-        "name",
-        flat=True,
-    )
+        if not content:
+            continue
 
-    for category in categories:
-        if category.lower() in combined_text:
-            context["last_category"] = category
+        # =================================================
+        # FIND LAST MENU ITEM
+        # =================================================
 
-    # menu items
-    items = MenuItem.objects.all()[:200]
+        if not context["last_dish"]:
 
-    for item in items:
-        if item.name.lower() in combined_text:
-            context["last_dish"] = item.name
+            matched_item = (
+                MenuItem.objects
+                .filter(name__icontains=content)
+                .first()
+            )
 
-    # intent detection
-    if (
-        "recommend" in combined_text
-        or "suggest" in combined_text
-    ):
-        context["last_intent"] = "recommendation"
+            if matched_item:
+                context["last_dish"] = matched_item.name
 
-    elif "price" in combined_text:
-        context["last_intent"] = "pricing"
+            else:
 
-    elif "ingredient" in combined_text:
-        context["last_intent"] = "ingredients"
+                # fuzzy partial match
+                items = MenuItem.objects.all()[:200]
 
-    elif "order" in combined_text:
-        context["last_intent"] = "orders"
+                for item in items:
+
+                    if item.name.lower() in content:
+                        context["last_dish"] = item.name
+                        break
+
+        # =================================================
+        # FIND LAST CATEGORY
+        # =================================================
+
+        if not context["last_category"]:
+
+            categories = MenuCategory.objects.all()
+
+            for category in categories:
+
+                if category.name.lower() in content:
+                    context["last_category"] = category.name
+                    break
+
+        # =================================================
+        # FIND LAST INTENT
+        # =================================================
+
+        if not context["last_intent"]:
+
+            if any(
+                word in content
+                for word in [
+                    "recommend",
+                    "suggest",
+                    "popular",
+                    "best",
+                ]
+            ):
+                context["last_intent"] = "recommendation"
+
+            elif any(
+                word in content
+                for word in [
+                    "price",
+                    "cost",
+                    "expensive",
+                    "cheap",
+                ]
+            ):
+                context["last_intent"] = "pricing"
+
+            elif any(
+                word in content
+                for word in [
+                    "ingredient",
+                    "contains",
+                    "made of",
+                ]
+            ):
+                context["last_intent"] = "ingredients"
+
+            elif any(
+                word in content
+                for word in [
+                    "detail",
+                    "more",
+                    "describe",
+                ]
+            ):
+                context["last_intent"] = "details"
 
     return context
 
 
 # =========================================================
-# FOLLOW-UP QUESTION HANDLER
+# FOLLOW-UP HANDLER
 # =========================================================
 
-def enhance_message_with_context(message, context):
+FOLLOW_UP_KEYWORDS = [
+    "more details",
+    "details",
+    "tell me more",
+    "more",
+    "price",
+    "ingredients",
+    "is it spicy",
+    "what comes with it",
+    "describe it",
+]
 
-    text = message.lower().strip()
 
-    # yes/no handling
-    if text in ["yes", "yeah", "yep", "sure", "ok"]:
+def enhance_message_with_context(
+    message,
+    context,
+):
 
-        if context["last_intent"] == "recommendation":
+    text = normalize(message)
+
+    last_dish = context.get("last_dish")
+    last_category = context.get("last_category")
+    last_intent = context.get("last_intent")
+
+    # =====================================================
+    # YES / OKAY HANDLING
+    # =====================================================
+
+    if text in [
+        "yes",
+        "yeah",
+        "yep",
+        "sure",
+        "ok",
+        "okay",
+    ]:
+
+        if last_dish:
             return (
-                "Please recommend similar dishes "
-                "based on the previous conversation."
+                f"Tell me more about "
+                f"{last_dish}"
             )
 
-    if (
-        "cheapest" in text
-        and context["last_category"]
-    ):
-        return (
-            f"Which item in category "
-            f"{context['last_category']} "
-            f"is cheapest?"
-        )
+        if last_category:
+            return (
+                f"Recommend more dishes "
+                f"from {last_category}"
+            )
 
-    if (
-        "most expensive" in text
-        and context["last_category"]
-    ):
-        return (
-            f"Which item in category "
-            f"{context['last_category']} "
-            f"is most expensive?"
-        )
+    # =====================================================
+    # DETAILS HANDLING
+    # =====================================================
 
-    if (
-        "ingredients" in text
-        and context["last_dish"]
-    ):
-        return (
-            f"What are the ingredients of "
-            f"{context['last_dish']}?"
-        )
+    if text in FOLLOW_UP_KEYWORDS:
+
+        if last_dish:
+
+            return (
+                f"Give full details about "
+                f"{last_dish} including "
+                f"description, ingredients, "
+                f"price and recommendations."
+            )
+
+    # =====================================================
+    # PRICE FOLLOW-UP
+    # =====================================================
 
     if (
         "price" in text
-        and context["last_dish"]
+        and last_dish
     ):
+
         return (
             f"What is the price of "
-            f"{context['last_dish']}?"
+            f"{last_dish}?"
+        )
+
+    # =====================================================
+    # INGREDIENT FOLLOW-UP
+    # =====================================================
+
+    if (
+        "ingredient" in text
+        and last_dish
+    ):
+
+        return (
+            f"What ingredients are in "
+            f"{last_dish}?"
+        )
+
+    # =====================================================
+    # CHEAPEST / EXPENSIVE
+    # =====================================================
+
+    if (
+        "cheapest" in text
+        and last_category
+    ):
+
+        return (
+            f"What is the cheapest dish "
+            f"in {last_category} category?"
+        )
+
+    if (
+        "expensive" in text
+        and last_category
+    ):
+
+        return (
+            f"What is the most expensive dish "
+            f"in {last_category} category?"
         )
 
     return message
@@ -211,14 +335,19 @@ def search_menu_items(
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     available_only: bool = True,
-    ingredients: Optional[List[str]] = None,
-    limit: int = 20,
+    limit: int = 10,
 ):
 
     query = Q()
 
+    queryset = MenuItem.objects.select_related(
+        "category"
+    )
+
     if keywords:
+
         for word in keywords:
+
             query |= (
                 Q(name__icontains=word)
                 | Q(description__icontains=word)
@@ -226,44 +355,30 @@ def search_menu_items(
                 | Q(category__name__icontains=word)
             )
 
-    queryset = MenuItem.objects.select_related(
-        "category"
-    )
-
-    if keywords:
         queryset = queryset.filter(query)
 
     if category:
+
         queryset = queryset.filter(
             category__name__icontains=category
         )
 
     if min_price is not None:
+
         queryset = queryset.filter(
             price__gte=min_price
         )
 
     if max_price is not None:
+
         queryset = queryset.filter(
             price__lte=max_price
         )
 
     if available_only:
+
         queryset = queryset.filter(
             availability=True
-        )
-
-    if ingredients:
-
-        ingredient_query = Q()
-
-        for ingredient in ingredients:
-            ingredient_query |= Q(
-                ingredients__icontains=ingredient
-            )
-
-        queryset = queryset.filter(
-            ingredient_query
         )
 
     queryset = queryset.distinct()[:limit]
@@ -274,10 +389,8 @@ def search_menu_items(
             "name": item.name,
             "category": item.category.name,
             "price": money(item.price),
-            "available": item.availability,
             "description": item.description or "",
             "ingredients": item.ingredients or "",
-            "image_url": item.image_url or "",
         }
         for item in queryset
     ]
@@ -292,7 +405,6 @@ def get_most_ordered_dishes(limit=5):
     rows = (
         OrderItem.objects
         .values(
-            "menu_item__id",
             "menu_item__name",
             "menu_item__category__name",
         )
@@ -307,44 +419,9 @@ def get_most_ordered_dishes(limit=5):
         {
             "dish": row["menu_item__name"],
             "category": row["menu_item__category__name"],
-            "times_ordered": row["total_orders"],
             "quantity_sold": row["total_quantity"],
         }
         for row in rows
-    ]
-
-
-# =========================================================
-# TOP RATED
-# =========================================================
-
-def get_top_rated_dishes(limit=5):
-
-    rows = (
-        MenuItem.objects
-        .annotate(
-            avg_rating=Avg(
-                "orderitem__order__feedback__rating"
-            ),
-            review_count=Count(
-                "orderitem__order__feedback"
-            ),
-        )
-        .filter(review_count__gt=0)
-        .order_by(
-            "-avg_rating",
-            "-review_count",
-        )[:limit]
-    )
-
-    return [
-        {
-            "name": item.name,
-            "rating": round(item.avg_rating or 0, 2),
-            "reviews": item.review_count,
-            "price": money(item.price),
-        }
-        for item in rows
     ]
 
 
@@ -373,26 +450,14 @@ def get_personalized_recommendations(
         for x in favorite_categories
     ]
 
-    if category_names:
-
-        items = (
-            MenuItem.objects
-            .select_related("category")
-            .filter(
-                category__name__in=category_names,
-                availability=True,
-            )[:limit]
-        )
-
-    else:
-
-        items = (
-            MenuItem.objects
-            .select_related("category")
-            .filter(
-                availability=True
-            )[:limit]
-        )
+    items = (
+        MenuItem.objects
+        .select_related("category")
+        .filter(
+            category__name__in=category_names,
+            availability=True,
+        )[:limit]
+    )
 
     return [
         {
@@ -405,7 +470,7 @@ def get_personalized_recommendations(
 
 
 # =========================================================
-# TOOL DEFINITIONS
+# TOOLS
 # =========================================================
 
 TOOLS = [
@@ -426,12 +491,6 @@ TOOLS = [
                     "category": {
                         "type": "string"
                     },
-                    "min_price": {
-                        "type": "number"
-                    },
-                    "max_price": {
-                        "type": "number"
-                    },
                 },
             },
         },
@@ -441,17 +500,6 @@ TOOLS = [
         "function": {
             "name": "get_popular_dishes",
             "description": "Get popular dishes",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-            },
-        },
-    },
-    {
-        "type": "function",
-        "function": {
-            "name": "get_top_rated",
-            "description": "Get top rated dishes",
             "parameters": {
                 "type": "object",
                 "properties": {},
@@ -483,20 +531,18 @@ def execute_tool(
 ):
 
     if tool_name == "search_menu":
+
         return search_menu_items(
             keywords=arguments.get("keywords"),
             category=arguments.get("category"),
-            min_price=arguments.get("min_price"),
-            max_price=arguments.get("max_price"),
         )
 
     if tool_name == "get_popular_dishes":
+
         return get_most_ordered_dishes()
 
-    if tool_name == "get_top_rated":
-        return get_top_rated_dishes()
-
     if tool_name == "get_recommendations":
+
         return get_personalized_recommendations(
             user
         )
@@ -518,22 +564,26 @@ def build_system_prompt(user):
         role = user.role
 
     return f"""
-You are an advanced AI restaurant assistant.
+You are an intelligent restaurant AI assistant.
 
-Rules:
-- ONLY use provided database facts
-- NEVER hallucinate dishes, prices, ratings, or analytics
-- If information is unavailable, clearly say so
-- Be conversational and friendly
-- ALWAYS understand follow-up messages
-- NEVER restart the conversation unnecessarily
-- If the user says "yes", "okay", "sure", or similar,
-  continue from previous context naturally
-- Use previous messages to understand intent
-- Recommend dishes intelligently
-- Personalize responses when possible
-- give answers even if user provide with spelling mistakes and short names (eg: "piz" for "pizza" or "coke" for "coca-cola" or vegi for vegetarian)
-- Answer with commen sense and suggestions to make the conversation more engaging and natural
+IMPORTANT RULES:
+
+- ALWAYS maintain conversation continuity
+- ALWAYS understand follow-up questions
+- NEVER ask unnecessary clarification questions
+- If the user says:
+  "more details"
+  "price"
+  "ingredients"
+  "is it spicy"
+  "tell me more"
+  → refer to the LAST discussed dish
+
+- Be natural and conversational
+- NEVER hallucinate menu items
+- ONLY use provided tool/database results
+- Understand spelling mistakes naturally
+- Keep responses concise but useful
 
 Current user role: {role}
 """
@@ -554,36 +604,51 @@ def ask_chatbot(
         session_id,
     )
 
-    # load previous history
+    # =====================================================
+    # LOAD HISTORY
+    # =====================================================
+
     history = get_conversation_history(
         conversation_key
     )
 
-    # extract context
-    history_context = (
-        extract_context_from_history(
-            history
-        )
+    # =====================================================
+    # EXTRACT CONTEXT
+    # =====================================================
+
+    context = extract_context_from_history(
+        history
     )
 
-    # enhance follow-up questions
+    # =====================================================
+    # ENHANCE FOLLOW-UP MESSAGE
+    # =====================================================
+
     enhanced_message = (
         enhance_message_with_context(
             message,
-            history_context,
+            context,
         )
     )
 
-    # save user message
+    # =====================================================
+    # SAVE USER MESSAGE
+    # =====================================================
+
+    user_message = {
+        "role": "user",
+        "content": enhanced_message,
+    }
+
     save_message(
         conversation_key,
-        {
-            "role": "user",
-            "content": enhanced_message,
-        }
+        user_message,
     )
 
-    # rebuild history
+    # =====================================================
+    # BUILD MESSAGE LIST
+    # =====================================================
+
     history = get_conversation_history(
         conversation_key
     )
@@ -595,18 +660,19 @@ def ask_chatbot(
         }
     ]
 
-    # inject memory
     messages.extend(history)
 
     # =====================================================
     # FIRST RESPONSE
     # =====================================================
 
-    first_response = client.chat.completions.create(
-        model="gpt-4.1-mini",
-        messages=messages,
-        tools=TOOLS,
-        tool_choice="auto",
+    first_response = (
+        client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=messages,
+            tools=TOOLS,
+            tool_choice="auto",
+        )
     )
 
     response_message = (
@@ -618,23 +684,23 @@ def ask_chatbot(
     tool_calls = response_message.tool_calls
 
     # =====================================================
-    # TOOL CALL FLOW
+    # TOOL FLOW
     # =====================================================
 
     if tool_calls:
 
-        # append assistant tool call
         messages.append(response_message)
 
-        # save assistant tool call
         save_message(
             conversation_key,
-            response_message.model_dump()
+            response_message.model_dump(),
         )
 
         for tool_call in tool_calls:
 
-            tool_name = tool_call.function.name
+            tool_name = (
+                tool_call.function.name
+            )
 
             arguments = json.loads(
                 tool_call.function.arguments
@@ -655,15 +721,10 @@ def ask_chatbot(
 
             messages.append(tool_message)
 
-            # save tool response
             save_message(
                 conversation_key,
-                tool_message
+                tool_message,
             )
-
-        # =================================================
-        # FINAL RESPONSE
-        # =================================================
 
         final_response = (
             client.chat.completions.create(
@@ -679,7 +740,6 @@ def ask_chatbot(
             .content
         )
 
-        # save final assistant message
         save_message(
             conversation_key,
             {
@@ -716,11 +776,9 @@ def reset_chat(
     session_id=None,
 ):
 
-    conversation_key = (
-        get_conversation_key(
-            user,
-            session_id,
-        )
+    conversation_key = get_conversation_key(
+        user,
+        session_id,
     )
 
     clear_conversation(

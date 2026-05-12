@@ -24,7 +24,7 @@ class OrderItemCreateSerializer(serializers.ModelSerializer):
 class FeedbackSerializer(serializers.ModelSerializer):
     class Meta:
         model = Feedback
-        fields = ['id', 'rating', 'comment']
+        fields = ['id', 'order_id', 'order_created_at', 'rating', 'comment']
 
 class OrderCreateSerializer(serializers.ModelSerializer):
     items = OrderItemCreateSerializer(many=True, write_only=True)

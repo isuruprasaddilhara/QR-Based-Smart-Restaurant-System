@@ -27,10 +27,8 @@ urlpatterns = [
     path('<int:pk>/feedback/', FeedbackCreateView.as_view(), name='feedback-create'),
     path('<int:pk>/feedback/detail/', FeedbackDetailView.as_view(), name='feedback-detail'),
     path('<int:pk>/feedback/delete/', FeedbackDeleteView.as_view(), name='feedback-delete'),
-    
-    
 
-     path('my-orders/', UserOrderListView.as_view(), name='my-orders'),
+    path('my-orders/', UserOrderListView.as_view(), name='my-orders'),
 
     path('<int:order_id>/bill/soft/', bill_soft_copy_view, name='bill-soft'),
     path('<int:order_id>/bill/print/', bill_hard_copy_view, name='bill-hard-copy'),

@@ -8,7 +8,7 @@ def create_table_with_qr ( table_number: int, section: str = None, capacity: int
     table = Table.objects.create(table_number=table_number, qr_code=token, status=False, section=section, capacity=capacity)
     return table
 
-def build_qr_image(table: Table, base_url: str = "https://yourapp.com/menu") -> BytesIO:
+def build_qr_image(table: Table, base_url: str = "https://scan2serve-1.web.app/") -> BytesIO:
     qr_url = f"{base_url}?table_no={table.table_number}&token={table.qr_code}"  # both table_number and token in URL
 
     qr = qrcode.QRCode(version=1, box_size=10, border=4)

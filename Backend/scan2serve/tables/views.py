@@ -126,7 +126,7 @@ def ir_status_update(request, pk):
     table.save(update_fields=['status'])
 
     return Response({
-        'id': table.id,
+        'table_number': table.table_number,
         'status': table.status,
         'message': f"Table is now {'occupied' if table.status else 'available'}.",
     })

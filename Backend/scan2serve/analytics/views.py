@@ -349,7 +349,7 @@ class TablePerformanceView(APIView):
                 created_at__date__gte=start_date,
                 created_at__date__lte=end_date,
             )
-            .values('table__id', 'table__section', 'table__capacity')
+            .values('table__table_number', 'table__section', 'table__capacity')
             .annotate(
                 order_count=Count('id'),
                 total_revenue=Sum('total_amount'),

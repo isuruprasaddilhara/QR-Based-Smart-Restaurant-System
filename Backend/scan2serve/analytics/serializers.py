@@ -29,7 +29,7 @@ class OrderStatusSummarySerializer(serializers.Serializer):
 
 
 class TablePerformanceSerializer(serializers.Serializer):
-    table__id = serializers.IntegerField()
+    table__table_number = serializers.IntegerField()
     table__section = serializers.CharField(allow_null=True)
     table__capacity = serializers.IntegerField()
     order_count = serializers.IntegerField()

@@ -840,7 +840,8 @@ def ask_chatbot(
 
     first_response = (
         client.chat.completions.create(
-            model="gpt-4.1-mini",
+            # model="gpt-4.1-mini",model="gpt-4.1-mini",
+            model="gpt-4.1",
             messages=messages,
             tools=TOOLS,
             tool_choice="auto",

@@ -681,7 +681,80 @@ IMPORTANT RULES:
 - NEVER hallucinate menu items
 - ONLY use provided tool/database results
 - Understand spelling mistakes naturally
-- Keep responses concise but useful
+- Keep responses concise but 
+
+-------below is the frequently ask questions and answers for your reference-------
+Category 1 — Using Scan2Serve (app, orders & service)
+Q: How do I place an order?
+A: Open the menu, add dishes to your cart, go to checkout, enter your table number if asked, and confirm.
+Q: Can I order as a guest?
+A: Yes. An account can help with past orders and more personalized chat answers.
+Q: Why do you need my table number?
+A: So staff know where to bring your food.
+Q: The menu link or QR code doesn’t work.
+A: Check your connection, refresh, or ask staff for a new QR or link.
+Q: How do I track my order?
+A: Use Track My Order in the chat or the track-order screen. Guests should keep any tracking details until the order is served.
+Q: Why does the chat ask me to log in?
+A: Questions about your order history may require a logged-in account. General questions often do not.
+Q: Can I change my order after I submit it?
+A: It depends on the restaurant and how far preparation has gone. Use chat or ask staff at the table.
+Q: Something is wrong with my order (wrong or missing item).
+A: Share your table and order details here, or speak to staff so they can fix it quickly.
+Q: How do I pay? / Will I get a receipt?
+A: Follow on-screen checkout or pay as the location instructs. Receipts may be in-app, by email, or from staff—ask if you need a printed copy.
+Q: The app is slow or won’t load.
+A: Try reopening the link, switching network, or updating the browser. Ask staff if it keeps failing.
+Q: Who do I contact for support?
+A: Use this chat for app issues; ask the restaurant directly for on-site policies, refunds, or billing they handle themselves
+
+Category 1 — Using Scan2Serve (app, orders & service)
+Q: How do I place an order?
+A: Open the menu, add dishes to your cart, go to checkout, enter your table number if asked, and confirm.
+Q: Can I order as a guest?
+A: Yes. An account can help with past orders and more personalized chat answers.
+Q: Why do you need my table number?
+A: So staff know where to bring your food.
+Q: The menu link or QR code doesn’t work.
+A: Check your connection, refresh, or ask staff for a new QR or link.
+Q: How do I track my order?
+A: Use Track My Order in the chat or the track-order screen. Guests should keep any tracking details until the order is served.
+Q: Why does the chat ask me to log in?
+A: Questions about your order history may require a logged-in account. General questions often do not.
+Q: Can I change my order after I submit it?
+A: It depends on the restaurant and how far preparation has gone. Use chat or ask staff at the table.
+Q: Something is wrong with my order (wrong or missing item).
+A: Share your table and order details here, or speak to staff so they can fix it quickly.
+Q: How do I pay? / Will I get a receipt?
+A: Follow on-screen checkout or pay as the location instructs. Receipts may be in-app, by email, or from staff—ask if you need a printed copy.
+Q: The app is slow or won’t load.
+A: Try reopening the link, switching network, or updating the browser. Ask staff if it keeps failing.
+Q: Who do I contact for support?
+A: Use this chat for app issues; ask the restaurant directly for on-site policies, refunds, or billing they handle themselves.
+Category 2 — Food, allergens & dietary needs
+Q: Is this dish gluten-free?
+A: Treat menu labels as a guide; recipes can change. For strict gluten-free needs, add notes and confirm with staff before eating.
+Q: Do you have a gluten-free menu?
+A: Look for marked items or ask staff; some dishes can be changed, others cannot due to shared prep or fryers.
+Q: Is it dairy-free / lactose-free?
+A: Check descriptions and allergen notes, then confirm with staff—many sauces contain dairy.
+Q: Can you make it without egg?
+A: Only if the dish allows it. Add a clear note; staff may suggest another item if it isn’t possible.
+Q: Does this contain nuts or peanuts? Is the kitchen nut-free?
+A: Use on-item allergen info if shown, and always ask staff. Most kitchens are not nut-free; cross-contact is possible.
+Q: Is this vegan? / Can vegetarian be made vegan?
+A: Check labels; vegetarian is not always vegan. Notes help; staff may suggest swaps or alternatives.
+Q: Is the food halal / kosher certified?
+A: It varies by restaurant. Look for certification on the menu or ask staff—the app alone cannot guarantee it.
+Q: Is this spicy? Can you make it mild?
+A: Check the menu; add “mild” or “extra spicy” in special notes when possible.
+Q: Low salt / no MSG / diabetic-friendly?
+A: Put your needs in the notes; staff can say if the dish can be adjusted or if another option is better.
+Q: What if I have a severe allergy?
+A: Always speak to staff in person before you rely on the order; online notes are not enough for severe allergies.
+Disclaimer line (optional at end of Category 2):
+Allergen and dietary information comes from the restaurant and may change. When in doubt, ask staff before you order.
+ 
 
 Current user role: {role}
 """

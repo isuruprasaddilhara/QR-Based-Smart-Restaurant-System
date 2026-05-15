@@ -126,17 +126,20 @@ def generate_bill_pdf(order) -> bytes:
     story.append(Spacer(1, 4 * mm))
 
     # ── Grand total ────────────────────────────────────────────────────────────
-    totals_tbl = Table(
-        [[Paragraph("<b>GRAND TOTAL</b>", total_s),
-          Paragraph(f"<b>LKR {order.total_amount:.2f}</b>", total_s)]],
-        colWidths=["70%", "30%"],
-    )
-    totals_tbl.setStyle(TableStyle([
-        ("TOPPADDING",    (0, 0), (-1, -1), 5),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    breakdown_rows = [
+        [Paragraph("Subtotal",            left_s), Paragraph(f"LKR {order.subtotal:.2f}",        right_s)],
+        [Paragraph("Service Charge (5%)", left_s), Paragraph(f"LKR {order.service_charge:.2f}",  right_s)],
+        [Paragraph("Tax (8%)",            left_s), Paragraph(f"LKR {order.tax:.2f}",             right_s)],
+        [Paragraph("<b>GRAND TOTAL</b>",  total_s), Paragraph(f"<b>LKR {order.total_amount:.2f}</b>", total_s)],
+    ]
+    breakdown_tbl = Table(breakdown_rows, colWidths=["70%", "30%"])
+    breakdown_tbl.setStyle(TableStyle([
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
         ("LINEABOVE",     (0, 0), (-1, 0),  1, colors.HexColor("#cccccc")),
+        ("LINEABOVE",     (0, -1), (-1, -1), 1, colors.HexColor("#cccccc")),
     ]))
-    story.append(totals_tbl)
+    story.append(breakdown_tbl)
     story.append(Spacer(1, 6 * mm))
 
     # ── Footer ─────────────────────────────────────────────────────────────────
@@ -257,18 +260,22 @@ def _build_thermal_story(order) -> list:
     story.append(items_tbl)
     story.append(Spacer(1, 2 * mm))
 
-    # ── Grand total ────────────────────────────────────────────────────────────
+  # ── Grand total ────────────────────────────────────────────────────────────
     story.append(HRFlowable(width="100%", thickness=0.5, color=colors.black))
     story.append(Spacer(1, 1 * mm))
-    grand_tbl = Table([[
-        Paragraph("TOTAL", total_l),
-        Paragraph(f"LKR {order.total_amount:.2f}", total_r),
-    ]], colWidths=["50%", "50%"])
+    breakdown_rows = [
+        [Paragraph("Subtotal",            meta_l), Paragraph(f"LKR {order.subtotal:.2f}",       meta_r)],
+        [Paragraph("Service Charge (5%)", meta_l), Paragraph(f"LKR {order.service_charge:.2f}", meta_r)],
+        [Paragraph("Tax (8%)",            meta_l), Paragraph(f"LKR {order.tax:.2f}",            meta_r)],
+        [Paragraph("TOTAL",               total_l), Paragraph(f"LKR {order.total_amount:.2f}",  total_r)],
+    ]
+    grand_tbl = Table(breakdown_rows, colWidths=["50%", "50%"])
     grand_tbl.setStyle(TableStyle([
         ("TOPPADDING",    (0, 0), (-1, -1), 2),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
         ("LEFTPADDING",   (0, 0), (-1, -1), 0),
         ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+        ("LINEABOVE",     (0, -1), (-1, -1), 0.5, colors.black),
     ]))
     story.append(grand_tbl)
     story.append(Spacer(1, 2 * mm))

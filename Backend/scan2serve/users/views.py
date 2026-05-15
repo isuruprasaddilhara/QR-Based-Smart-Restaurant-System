@@ -327,3 +327,17 @@ class UserDetailView(APIView):
 
         serializer = UserSerializer(user)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+ 
+class CustomerMeView(APIView):
+    """GET /users/customer/me/ — current customer profile (id, email, name, phone_no, role)."""
+ 
+    permission_classes = [IsAuthenticated]
+ 
+    def get(self, request):
+        if getattr(request.user, "role", None) != "customer":
+            return Response(
+                {"detail": "Only customers can access this endpoint."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        return Response(UserSerializer(request.user).data, status=status.HTTP_200_OK)

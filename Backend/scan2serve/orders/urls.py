@@ -22,14 +22,13 @@ urlpatterns = [
     path('<int:pk>/status/', OrderStatusUpdateView.as_view(), name='order-status-update'),
     path('<int:order_id>/request-bill/', request_bill_view, name='order-request-bill'),
     path('bill-requested-orders/', BillRequestedOrdersView.as_view(), name='bill-requested-orders'),
+    path('feedbacks/my-feedbacks/', CustomerFeedbackListView.as_view(), name='my-feedbacks'),
     path('feedbacks/', FeedbackListView.as_view(), name='feedback-list'),
     path('<int:pk>/feedback/', FeedbackCreateView.as_view(), name='feedback-create'),
     path('<int:pk>/feedback/detail/', FeedbackDetailView.as_view(), name='feedback-detail'),
     path('<int:pk>/feedback/delete/', FeedbackDeleteView.as_view(), name='feedback-delete'),
-    path('feedbacks/my-feedbacks/', CustomerFeedbackListView.as_view(), name='my-feedbacks'),
-    
 
-     path('my-orders/', UserOrderListView.as_view(), name='my-orders'),
+    path('my-orders/', UserOrderListView.as_view(), name='my-orders'),
 
     path('<int:order_id>/bill/soft/', bill_soft_copy_view, name='bill-soft'),
     path('<int:order_id>/bill/print/', bill_hard_copy_view, name='bill-hard-copy'),

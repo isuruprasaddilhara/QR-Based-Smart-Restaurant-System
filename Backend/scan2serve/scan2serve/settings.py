@@ -27,7 +27,8 @@ ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
     "34.66.44.131",
-    "scan2serve.online"
+    "scan2serve.online",
+    "10.0.2.2",
 ]
 
 CSRF_TRUSTED_ORIGINS = [
@@ -65,6 +66,8 @@ INSTALLED_APPS = [
     "orders",
     "chatbot",
     "analytics",
+    'anymail',
+    'favourites',
 ]
 
 # MIDDLEWARE
@@ -189,19 +192,35 @@ SIMPLE_JWT = {
 }
 
 # CORS
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://10.0.2.2:5173",
     "https://scan2serve-frontend-ix17.onrender.com",
     "https://scan2serve.online",
 ]
 
+
+# ↓ Add this
+from corsheaders.defaults import default_headers
+
+CORS_ALLOW_HEADERS = [
+    *default_headers,
+    "X-Guest-Token",
+    "X-ESP32-Token",
+]
+# ANYMAIL = {
+#     "MAILJET_API_KEY": os.getenv("MAILJET_API_KEY"),
+#     "MAILJET_SECRET_KEY": os.getenv("MAILJET_SECRET_KEY"),
+# }
+# EMAIL_BACKEND = "anymail.backends.mailjet.EmailBackend"
 ANYMAIL = {
-    "BREVO_API_KEY": os.getenv("BREVO_API_KEY"),
+    "RESEND_API_KEY": os.getenv("RESEND_API_KEY"), # Replace with your real key
 }
-EMAIL_BACKEND = "anymail.backends.brevo.EmailBackend"
+
+EMAIL_BACKEND = "anymail.backends.resend.EmailBackend"
 DEFAULT_FROM_EMAIL = os.getenv("EMAIL_HOST_USER")
 
 # Tells Django to trust the X-Forwarded-Proto header from Nginx

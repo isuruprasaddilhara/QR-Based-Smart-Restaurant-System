@@ -92,10 +92,10 @@ class OrderListCreateView(generics.ListCreateAPIView):
         return OrderSerializer
 
     def get_permissions(self):
+        # List all orders: staff only. Create order: guest or anyone (handled in perform_create).
         if self.request.method == 'GET':
-            return [AllowAny()]
-        if self.request.method == 'DELETE':
-            # Ownership enforced in get_object() via get_order_for_request
+            return [IsStaff()]
+        if self.request.method == 'POST':
             return [AllowAny()]
         return [(IsAdmin | IsCashier | IsKitchen)()]
 
@@ -103,10 +103,6 @@ class OrderListCreateView(generics.ListCreateAPIView):
         user = self.request.user if self.request.user.is_authenticated else None
         guest_token = None if user else secrets.token_urlsafe(32)
         serializer.save(user=user, guest_token=guest_token)
-        # esp32_ip = getattr(settings, 'KITCHEN_ESP32_IP', None)
-        # from orders.services import trigger_kitchen_buzzer
-        # #logger.info("New order #%s created — triggering kitchen buzzer at %s", instance.pk, esp32_ip)
-        # trigger_kitchen_buzzer(esp32_ip, frequency=2500, duration_ms=2000)
 
 
 class OrderDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):
@@ -121,13 +117,17 @@ class OrderDetailView(OrderAccessMixin, generics.RetrieveUpdateDestroyAPIView):
     serializer_class = OrderSerializer
 
     def get_permissions(self):
-        if self.request.method == 'GET':
-            # Ownership / guest-token check is enforced in get_object().
+        if self.request.method in ('GET', 'DELETE'):
             return [AllowAny()]
         return [(IsAdmin | IsCashier | IsKitchen)()]
 
     def get_object(self):
         return self.get_order(self.kwargs['pk'])
+
+    def perform_destroy(self, instance):
+        if instance.status not in ('pending'):
+            raise ValidationError("Only pending orders can be deleted.")
+        instance.delete()
 
 
 class OrderStatusUpdateView(APIView):
@@ -183,6 +183,29 @@ class FeedbackDetailView(OrderAccessMixin, generics.RetrieveUpdateAPIView):
         # Validate the requester can access the parent order first.
         self.get_order(self.kwargs['pk'])
         return get_object_or_404(Feedback, order__pk=self.kwargs['pk'])
+
+class FeedbackDeleteView(OrderAccessMixin, generics.DestroyAPIView):
+    """DELETE /orders/<pk>/feedback/ — Owner or guest deletes their own feedback."""
+
+    permission_classes = [AllowAny]
+
+    def get_object(self):
+        # get_order() enforces ownership / guest-token check on the parent order
+        self.get_order(self.kwargs['pk'])
+        return get_object_or_404(Feedback, order__pk=self.kwargs['pk'])
+
+class CustomerFeedbackListView(generics.ListAPIView):
+    """GET /feedbacks/my-feedbacks/ — List all feedbacks for the authenticated customer."""
+    serializer_class = FeedbackSerializer
+    permission_classes = [IsCustomer]
+
+    def get_queryset(self):
+        return (
+            Feedback.objects
+            .filter(order__user=self.request.user)
+            .select_related('order')
+            .order_by('-order__created_at')
+        )
 
 
 # ── Bill / Request-Bill Views ──────────────────────────────────────────────────
@@ -259,7 +282,7 @@ def bill_soft_copy_view(request, order_id):
 
     restaurant = getattr(order.table, 'restaurant', None)
     rest_name  = getattr(restaurant, 'name', 'Scan2Serve Restaurant') if restaurant else 'Scan2Serve Restaurant'
-    from_email = (getattr(restaurant, 'email', None) if restaurant else None) or 'scan2serve.email@gmail.com'
+    from_email = (getattr(restaurant, 'email', None) if restaurant else None) or 'noreply@scan2serve.online'
     tbl_number = getattr(order.table, 'number', getattr(order.table, 'table_number', order.table.pk))
 
     try:
@@ -431,25 +454,3 @@ class UserOrderListView(generics.ListAPIView):
             'orders': serializer.data,
         })
 
-class FeedbackDeleteView(OrderAccessMixin, generics.DestroyAPIView):
-    """DELETE /orders/<pk>/feedback/ — Owner or guest deletes their own feedback."""
-
-    permission_classes = [AllowAny]
-
-    def get_object(self):
-        # get_order() enforces ownership / guest-token check on the parent order
-        self.get_order(self.kwargs['pk'])
-        return get_object_or_404(Feedback, order__pk=self.kwargs['pk'])
-
-class CustomerFeedbackListView(generics.ListAPIView):
-    """GET /feedbacks/my-feedbacks/ — List all feedbacks for the authenticated customer."""
-    serializer_class = FeedbackSerializer
-    permission_classes = [IsCustomer]
-
-    def get_queryset(self):
-        return (
-            Feedback.objects
-            .filter(order__user=self.request.user)
-            .select_related('order')
-            .order_by('-order__created_at')
-        )

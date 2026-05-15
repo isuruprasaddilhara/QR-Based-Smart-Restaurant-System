@@ -16,14 +16,17 @@ def table_list(request):
         tables = Table.objects.all()
         serializer = TableSerializer(tables, many=True, context={'request': request})
         return Response(serializer.data)
-
+    
     if request.method == 'POST':
-        table_number = request.data.get('table_number')
-        section = request.data.get('section', None)
-        capacity = request.data.get('capacity', 2)
-        table = create_table_with_qr(table_number=table_number, section=section, capacity=capacity)
-        serializer = TableSerializer(table, context={'request': request})
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        try:
+            table_number = request.data.get('table_number')
+            section = request.data.get('section', None)
+            capacity = request.data.get('capacity', 2)
+            table = create_table_with_qr(table_number=table_number, section=section, capacity=capacity)
+            serializer = TableSerializer(table, context={'request': request})
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['GET', 'PATCH', 'DELETE'])
@@ -74,11 +77,11 @@ def download_qr(request, pk):
     except Table.DoesNotExist:
         return Response({'error': 'Table not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    base_url = request.query_params.get('base_url', 'https://yourapp.com/menu')
-    buffer = build_qr_image(table, base_url=base_url)  # pass full table object
+    url = request.query_params.get('url', 'https://scan2serve-1.web.app/')
+    buffer = build_qr_image(table, url=url)  # pass full table object
 
     response = FileResponse(buffer, content_type='image/png')
-    response['Content-Disposition'] = f'attachment; filename="table_{table.id}_qr.png"'
+    response['Content-Disposition'] = f'attachment; filename="table_{table.table_number}_qr.png"'
     return response
 
 
@@ -123,7 +126,7 @@ def ir_status_update(request, pk):
     table.save(update_fields=['status'])
 
     return Response({
-        'id': table.id,
+        'table_number': table.table_number,
         'status': table.status,
         'message': f"Table is now {'occupied' if table.status else 'available'}.",
     })

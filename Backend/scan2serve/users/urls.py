@@ -8,6 +8,7 @@ urlpatterns = [
     path('auth/logout/', views.LogoutView.as_view(), name='logout'),  
     path('auth/register/customer/', views.CustomerRegisterView.as_view(), name='customer-register'),
     path('auth/register/staff/', views.StaffRegisterView.as_view(), name='staff-register'),
+    path('customer/me/', views.CustomerMeView.as_view(), name='customer-me'),
     path('customer/edit/' ,views.CustomerEditView.as_view(),   name='customer-edit'),
     path('customer/delete/' ,views.CustomerDeleteView.as_view(), name='customer-delete'),
     path('staff/edit/<int:user_id>/' ,views.StaffEditView.as_view(), name='staff-edit'),

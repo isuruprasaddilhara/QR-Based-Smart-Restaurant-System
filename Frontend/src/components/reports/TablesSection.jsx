@@ -15,8 +15,8 @@ function TablesSection({ ui, tablePerf }) {
           </thead>
           <tbody>
             {tablePerf.map((t, idx) => (
-              <tr key={`${t.table__id}-${idx}`}>
-                <td>{t.table__id}</td>
+              <tr key={`${t.table__table_number}-${idx}`}>
+                <td>{t.table__table_number}</td>
                 <td>{t.table__section || "-"}</td>
                 <td>{t.table__capacity}</td>
                 <td>{t.order_count}</td>

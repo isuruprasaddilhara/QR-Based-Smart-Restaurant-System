@@ -351,7 +351,7 @@ class TablePerformanceView(APIView):
             )
             .values('table__table_number', 'table__section', 'table__capacity')
             .annotate(
-                order_count=Count('id'),
+                order_count=Count('table__table_number'),
                 total_revenue=Sum('total_amount'),
             )
             .order_by('-total_revenue')

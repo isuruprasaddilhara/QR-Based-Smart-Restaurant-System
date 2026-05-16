@@ -232,7 +232,7 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
 # Required for Django 4.0+ to handle CSRF over HTTPS
-CSRF_TRUSTED_ORIGINS = ['https://scan2serve.online']
+CSRF_TRUSTED_ORIGINS = ['https://scan2serve.online','https://scan2serve-1.web.app']
 
 # LOGGING
 LOGGING = {

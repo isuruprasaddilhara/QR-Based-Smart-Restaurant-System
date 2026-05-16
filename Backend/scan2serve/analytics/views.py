@@ -264,12 +264,7 @@ class TopMenuItemsView(APIView):
             .values('menu_item__id', 'menu_item__name', 'menu_item__category__name')
             .annotate(
                 total_quantity=Sum('quantity'),
-                total_revenue=Sum(
-                    ExpressionWrapper(
-                        total_revenue=Sum('price'),
-                        output_field=DecimalField(max_digits=12, decimal_places=2)
-                    )
-                ),
+                total_revenue=Sum('price'),
             )
             .order_by('-total_quantity')[:limit]
         )
@@ -295,12 +290,7 @@ class CategoryRevenueView(APIView):
             )
             .values('menu_item__category__name')
             .annotate(
-                total_revenue=Sum(
-                    ExpressionWrapper(
-                        total_revenue=Sum('price'),
-                        output_field=DecimalField(max_digits=12, decimal_places=2)
-                    )
-                ),
+                total_revenue=Sum('price'),
                 total_quantity=Sum('quantity'),
                 order_count=Count('order', distinct=True),
             )

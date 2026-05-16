@@ -266,7 +266,7 @@ class TopMenuItemsView(APIView):
                 total_quantity=Sum('quantity'),
                 total_revenue=Sum(
                     ExpressionWrapper(
-                        F('price') * F('quantity'),
+                        total_revenue=Sum('price'),
                         output_field=DecimalField(max_digits=12, decimal_places=2)
                     )
                 ),
@@ -297,7 +297,7 @@ class CategoryRevenueView(APIView):
             .annotate(
                 total_revenue=Sum(
                     ExpressionWrapper(
-                        F('price') * F('quantity'),
+                        total_revenue=Sum('price'),
                         output_field=DecimalField(max_digits=12, decimal_places=2)
                     )
                 ),

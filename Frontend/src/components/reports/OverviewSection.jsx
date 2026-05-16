@@ -112,7 +112,7 @@ function OverviewSection({
                 ) : (
                   tableRowsOrdered.map((t, idx) => (
                     <tr key={`${t.table__id}-${idx}`}>
-                      <td>#{t.table__id}</td>
+                      <td>#{t.table__table_number}</td>
                       <td>{t.order_count}</td>
                       <td>LKR {Number(t.total_revenue || 0).toLocaleString()}</td>
                     </tr>
